@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0b0f1a" />
+    <title>LINK START — 부유성 VR</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="title-screen">
+      <div class="bg-rings"></div>
+      <div class="panel">
+        <div class="kicker">VRMMORPG · fan-made</div>
+        <h1>LINK <span>START</span></h1>
+        <div class="sub">부유성 제1층 — 시작의 마을</div>
+
+        <div id="loading">
+          <div class="bar"><div class="fill" id="load-fill"></div></div>
+          <div class="load-msg" id="load-msg">세계를 생성하는 중…</div>
+        </div>
+
+        <div id="menu" class="hidden">
+          <button id="btn-vr" class="primary" disabled>
+            <span class="big">VR로 접속</span>
+            <span class="small" id="vr-note">Meta Quest 브라우저에서 열어주세요</span>
+          </button>
+          <button id="btn-desktop">
+            <span class="big">PC로 접속</span>
+            <span class="small">키보드 + 마우스</span>
+          </button>
+          <div class="row">
+            <label>그래픽</label>
+            <div class="seg" id="quality">
+              <button data-q="low">낮음</button>
+              <button data-q="medium">보통</button>
+              <button data-q="high">높음</button>
+            </div>
+          </div>
+        </div>
+
+        <details class="help">
+          <summary>조작법</summary>
+          <div class="cols">
+            <div>
+              <h3>Quest VR</h3>
+              <ul>
+                <li><b>왼쪽 스틱</b> 이동 · 스틱 클릭 달리기</li>
+                <li><b>오른쪽 스틱</b> 회전</li>
+                <li><b>오른손</b> 검 — 실제로 휘둘러서 공격</li>
+                <li><b>오른쪽 트리거 길게</b> 소드 스킬 충전 → 휘두르기</li>
+                <li><b>A</b> 대화 / 상호작용</li>
+                <li><b>B / Y</b> 메뉴 열기</li>
+                <li><b>X</b> 회복 포션 사용</li>
+              </ul>
+            </div>
+            <div>
+              <h3>PC</h3>
+              <ul>
+                <li><b>WASD</b> 이동 · <b>Shift</b> 달리기 · <b>Space</b> 점프</li>
+                <li><b>마우스</b> 시점 · <b>좌클릭</b> 베기</li>
+                <li><b>우클릭 길게</b> 소드 스킬 충전 → 좌클릭</li>
+                <li><b>E</b> 대화 · <b>Tab</b> 메뉴 · <b>Q</b> 포션</li>
+              </ul>
+            </div>
+          </div>
+        </details>
+        <div class="foot">Sword Art Online에서 영감을 받은 비공식 팬 제작 게임입니다. 모든 에셋은 코드로 생성되었습니다.</div>
+      </div>
+    </div>
+
+    <div id="crosshair" class="hidden"></div>
+    <div id="desktop-hint" class="hidden">클릭해서 마우스 잠금 · Esc 해제</div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
