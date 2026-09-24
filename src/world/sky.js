@@ -12,7 +12,8 @@ void main() {
 
 const skyFrag = /* glsl */ `
 precision highp float;
-uniform vec3 sunDir;
+uniform vec3 sunDir, uZenith, uMid, uHorizon, uWarm;
+uniform float uCloud;
 varying vec3 vDir;
 
 float hash(vec2 p) {
@@ -36,14 +37,14 @@ float fbm(vec2 p) {
 vec3 atmosphere(vec3 d) {
   float h = d.y;
   float sd = max(dot(d, sunDir), 0.0);
-  vec3 zenith = vec3(0.10, 0.25, 0.60);
-  vec3 mid = vec3(0.32, 0.50, 0.78);
-  vec3 horizon = vec3(0.92, 0.74, 0.58);
+  vec3 zenith = uZenith;
+  vec3 mid = uMid;
+  vec3 horizon = uHorizon;
   float hp = max(h, 0.0);
   vec3 col = mix(horizon, mid, smoothstep(0.0, 0.25, hp));
   col = mix(col, zenith, smoothstep(0.2, 0.9, hp));
   // warm scattering around the sun
-  col += vec3(1.0, 0.52, 0.22) * pow(sd, 5.0) * 0.55 * (1.0 - hp * 0.7);
+  col += uWarm * pow(sd, 5.0) * 0.55 * (1.0 - hp * 0.7);
   col += vec3(1.0, 0.78, 0.5) * pow(sd, 48.0) * 0.9;
   return col;
 }
@@ -60,12 +61,12 @@ void main() {
     // cumulus layer
     vec2 uv = d.xz / (d.y + 0.07) * 0.9;
     float c = fbm(uv * 0.85 + vec2(4.0, 1.0));
-    float cov = smoothstep(0.5, 0.78, c) * smoothstep(0.0, 0.15, d.y);
+    float cov = smoothstep(uCloud, uCloud + 0.28, c) * smoothstep(0.0, 0.15, d.y);
     float c2 = fbm(uv * 0.85 + vec2(4.0, 1.0) + sunDir.xz * 0.06);
     float lit = clamp(0.55 + (c - c2) * 5.0, 0.0, 1.2);
     vec3 shade = vec3(0.52, 0.5, 0.6);
     vec3 bright = vec3(1.0, 0.86, 0.7);
-    vec3 cloud = mix(shade, bright, lit) + vec3(1.0, 0.5, 0.2) * pow(sd, 4.0) * 0.6;
+    vec3 cloud = mix(shade, bright, lit) + uWarm * vec3(1.0, 0.96, 0.9) * pow(sd, 4.0) * 0.6;
     col = mix(col, cloud, cov * 0.92);
     // thin high cirrus
     float ci = fbm(vec2(uv.x * 0.3, uv.y * 1.4) + 30.0);
@@ -87,12 +88,31 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
 
-export function bakeSky(renderer, sunDir, size = 1024) {
+// Floor-1 golden hour; other floors pass their own palette.
+const GOLDEN = {
+  zenith: [0.1, 0.25, 0.6],
+  mid: [0.32, 0.5, 0.78],
+  horizon: [0.92, 0.74, 0.58],
+  warm: [1.0, 0.52, 0.22],
+  cloud: 0.5,
+  fogColor: [0.8, 0.7, 0.62],
+  sunColor: [1.0, 0.82, 0.62],
+  sunTint: [1.0, 0.66, 0.4],
+};
+
+export function bakeSky(renderer, sunDir, size = 1024, pal = GOLDEN) {
   const scene = new THREE.Scene();
   const mat = new THREE.ShaderMaterial({
     vertexShader: skyVert,
     fragmentShader: skyFrag,
-    uniforms: { sunDir: { value: sunDir.clone() } },
+    uniforms: {
+      sunDir: { value: sunDir.clone() },
+      uZenith: { value: new THREE.Vector3(...pal.zenith) },
+      uMid: { value: new THREE.Vector3(...pal.mid) },
+      uHorizon: { value: new THREE.Vector3(...pal.horizon) },
+      uWarm: { value: new THREE.Vector3(...pal.warm) },
+      uCloud: { value: pal.cloud },
+    },
     side: THREE.BackSide,
     depthWrite: false,
   });
@@ -113,8 +133,8 @@ export function bakeSky(renderer, sunDir, size = 1024) {
   return {
     background: rt.texture,
     environment: env,
-    fogColor: new THREE.Color(0.8, 0.7, 0.62),
-    sunColor: new THREE.Color(1.0, 0.82, 0.62),
-    sunTint: new THREE.Color(1.0, 0.66, 0.4),
+    fogColor: new THREE.Color(...pal.fogColor),
+    sunColor: new THREE.Color(...pal.sunColor),
+    sunTint: new THREE.Color(...pal.sunTint),
   };
 }

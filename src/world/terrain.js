@@ -1,7 +1,16 @@
 // Terrain: a polar grid (dense near the town, sparse at the rim) with a
 // splat shader that paints cobblestone / grass / dirt roads / rock per pixel.
 import * as THREE from 'three';
-import { heightAt, roadDistance, ROAD_SEGMENTS, WORLD_R, LAKE, TOWN } from './layout.js';
+import { heightF1, roadDistance, ROAD_SEGMENTS, WORLD_R, LAKE, TOWN } from './layout.js';
+
+// Floor-1 defaults; other floors pass their own height function, roads, lake…
+const F1 = {
+  height: heightF1,
+  segs: ROAD_SEGMENTS,
+  lake: LAKE,
+  cobbleR: 113.4,
+  grassTint: [1, 1, 1],
+};
 import { fbm, smoothstep } from '../core/noise.js';
 
 function ringRadii() {
@@ -15,7 +24,8 @@ function ringRadii() {
   return r;
 }
 
-export function buildTerrain(tex) {
+export function buildTerrain(tex, cfg = F1) {
+  const heightAt = cfg.height;
   const radii = ringRadii();
   const SEG = 288;
   const verts = [];
@@ -58,7 +68,8 @@ export function buildTerrain(tex) {
     normalMap: tex.grass.normal,
     roughness: 0.95,
   });
-  const segs = ROAD_SEGMENTS.map((s) => new THREE.Vector4(s[0], s[1], s[2], s[3]));
+  const segs = cfg.segs.map((s) => new THREE.Vector4(s[0], s[1], s[2], s[3]));
+  const lake = cfg.lake || { x: 1e5, z: 1e5, r: 1, level: 0 };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, {
       tGrass: { value: tex.grass.map }, nGrass: { value: tex.grass.normal },
@@ -66,7 +77,8 @@ export function buildTerrain(tex) {
       tCobble: { value: tex.cobble.map }, nCobble: { value: tex.cobble.normal },
       tRock: { value: tex.rock.map }, nRock: { value: tex.rock.normal },
       uSegs: { value: segs },
-      uLake: { value: new THREE.Vector4(LAKE.x, LAKE.z, LAKE.r, LAKE.level) },
+      uLake: { value: new THREE.Vector4(lake.x, lake.z, lake.r, lake.level) },
+      uGrassTint: { value: new THREE.Vector3(...cfg.grassTint) },
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vTW;\nvarying float vTUp;')
@@ -80,6 +92,7 @@ varying float vTUp;
 uniform sampler2D tGrass, nGrass, tDirt, nDirt, tCobble, nCobble, tRock, nRock;
 uniform vec4 uSegs[${segs.length}];
 uniform vec4 uLake;
+uniform vec3 uGrassTint;
 vec4 splatW;
 float segDist(vec2 p, vec4 s) {
   vec2 a = s.xy, b = s.zw;
@@ -91,7 +104,7 @@ vec4 computeSplat() {
   vec2 p = vTW.xz;
   float r = length(p);
   float n = texture2D(tRock, p / 23.0).g;
-  float cob = 1.0 - smoothstep(112.6, 114.2, r + (n - 0.5) * 1.6);
+  float cob = 1.0 - smoothstep(${(cfg.cobbleR - 0.8).toFixed(2)}, ${(cfg.cobbleR + 0.8).toFixed(2)}, r + (n - 0.5) * 1.6);
   float rd = 1e5;
   for (int i = 0; i < ${segs.length}; i++) rd = min(rd, segDist(p, uSegs[i]));
   float dirt = 1.0 - smoothstep(2.0, 3.8, rd + (n - 0.5) * 2.2);
@@ -115,6 +128,7 @@ vec4 computeSplat() {
   vec4 g1 = texture2D(tGrass, p / 5.0);
   vec4 g2 = texture2D(tGrass, p / 17.3 + 0.37);
   vec4 grass = mix(g1, g2, 0.35) * (0.85 + 0.35 * texture2D(tDirt, p / 61.0).r);
+  grass.rgb *= uGrassTint;
   vec4 dirt = texture2D(tDirt, p / 4.0);
   vec4 cob = texture2D(tCobble, p / 3.2);
   vec4 rock = texture2D(tRock, vec2(p.x + vTW.y * 0.7, p.y - vTW.y * 0.7) / 7.0) * vec4(0.7, 0.66, 0.6, 1.0);
@@ -140,6 +154,8 @@ roughnessFactor = dot(splatW, vec4(0.95, 0.92, 0.9, 0.9));`
 }`
       );
   };
+  // the shader bakes in the road count and paving radius: one program per floor
+  mat.customProgramCacheKey = () => `terrain-${segs.length}-${cfg.cobbleR}`;
   const mesh = new THREE.Mesh(g, mat);
   mesh.receiveShadow = true;
   mesh.name = 'terrain';
@@ -148,7 +164,7 @@ roughnessFactor = dot(splatW, vec4(0.95, 0.92, 0.9, 0.9));`
 }
 
 // Rocky underside of our floor: visible when looking over the edge at the overlook.
-export function buildEdgeCliff(m) {
+export function buildEdgeCliff(m, heightAt = heightF1) {
   const SEG = 180;
   const rings = [
     [WORLD_R, 0],
@@ -191,7 +207,15 @@ export function buildEdgeCliff(m) {
 }
 
 // Height + grass-density texture sampled by the GPU grass shader.
-export function buildHeightTexture(size = 512, extent = 512) {
+function densityF1(x, z) {
+  const r = Math.hypot(x, z);
+  if (r <= TOWN.safeR + 3 || r >= WORLD_R - 4) return 0;
+  const rd = roadDistance(x, z);
+  const lk = Math.hypot(x - LAKE.x, z - LAKE.z);
+  return smoothstep(3.2, 6, rd) * smoothstep(LAKE.r * 1.05, LAKE.r * 1.3, lk);
+}
+
+export function buildHeightTexture(size = 512, extent = 512, heightAt = heightF1, density = densityF1) {
   const data = new Uint16Array(size * size * 4);
   const toHalf = THREE.DataUtils.toHalfFloat;
   const H = new Float32Array(size * size);
@@ -208,12 +232,8 @@ export function buildHeightTexture(size = 512, extent = 512) {
       const x = (i + 0.5) * cell - extent;
       const z = (j + 0.5) * cell - extent;
       const h = H[j * size + i];
-      const r = Math.hypot(x, z);
-      let dens = 0;
-      if (r > TOWN.safeR + 3 && r < WORLD_R - 4) {
-        const rd = roadDistance(x, z);
-        const lk = Math.hypot(x - LAKE.x, z - LAKE.z);
-        dens = smoothstep(3.2, 6, rd) * smoothstep(LAKE.r * 1.05, LAKE.r * 1.3, lk);
+      let dens = density(x, z);
+      {
         if (dens > 0) {
           dens *= 0.45 + 0.75 * fbm(x * 0.03, z * 0.03, 3, 201);
           const i1 = Math.min(size - 1, i + 1), j1 = Math.min(size - 1, j + 1);

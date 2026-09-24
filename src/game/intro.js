@@ -67,6 +67,16 @@ export class LinkStart {
     this.duration = 7.2;
   }
 
+  setWelcome(sub) {
+    const old = this.welcome;
+    this.welcome = textSprite(['Welcome to', sub], 1024, 256, 100);
+    this.welcome.position.copy(old.position);
+    this.group.remove(old);
+    old.material.map.dispose();
+    old.material.dispose();
+    this.group.add(this.welcome);
+  }
+
   start(pos, yaw) {
     this.group.position.copy(pos);
     this.group.rotation.set(0, yaw, 0);

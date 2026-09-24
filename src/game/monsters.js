@@ -1,144 +1,62 @@
-// Field monsters: wild boars, grey wolves and the Boar King. Rendered as
-// instanced bodies + instanced legs (4 draw calls for every monster in the
-// world), driven by a small state machine AI.
+// Monsters of every floor: beasts that charge (boar, wolf, bull), weapon
+// wielders that chop / sweep / slam (kobolds, the Kobold Lord, the Taurus
+// General) and flying wasps that dive. Each species is drawn as instanced
+// body + instanced parts; one small state machine drives them all.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { heightAt, TOWN, BOSS_ARENA } from '../world/layout.js';
 import { RNG } from '../core/noise.js';
 import { FONT, roundRect } from './ui.js';
+import { RIGS, rigGeometry } from './monsterRigs.js';
 
 export const MONSTER_TYPES = {
   boar: {
     id: 'boar', name: '와일드 보어', level: 2, hp: 90, atk: 14, walk: 1.2, trot: 3.2, charge: 7.5,
     aggro: 8, leash: 36, windup: 0.6, attackT: 0.5, recover: 0.9, reach: 1.25, radius: 0.55, len: 1.5, height: 0.8,
-    exp: 35, col: 18, scale: 1, shard: 0x9ad8ff, sound: 'grunt',
+    exp: 35, col: 18, scale: 1, shard: 0x9ad8ff, sound: 'grunt', rig: 'boar', style: 'charge', shadow: 1.6,
+    drop: { id: 'boarHide', p: 0.3 },
   },
   wolf: {
     id: 'wolf', name: '그레이 울프', level: 4, hp: 135, atk: 20, walk: 1.5, trot: 4.8, charge: 9,
     aggro: 14, leash: 40, windup: 0.45, attackT: 0.36, recover: 0.7, reach: 1.35, radius: 0.45, len: 1.35, height: 0.95,
-    exp: 60, col: 30, scale: 1, shard: 0xb8c8ff, sound: 'growl',
+    exp: 60, col: 30, scale: 1, shard: 0xb8c8ff, sound: 'growl', rig: 'wolf', style: 'charge', shadow: 1.3, lunge: 1.4,
+    drop: { id: 'wolfFang', p: 0.3 },
   },
   boss: {
     id: 'boss', name: '보어 킹', level: 9, hp: 1500, atk: 42, walk: 1.0, trot: 3.6, charge: 9.5,
     aggro: 18, leash: 55, windup: 1.0, attackT: 0.75, recover: 1.5, reach: 1.25, radius: 0.55, len: 1.5, height: 0.8,
-    exp: 700, col: 800, scale: 2.7, shard: 0xffb080, sound: 'roar', boss: true,
+    exp: 700, col: 800, scale: 2.7, shard: 0xffb080, sound: 'roar', boss: true, rig: 'boar', style: 'charge',
+    tint: [0.85, 0.55, 0.5], shadow: 1.6, respawn: 90, drop: { id: 'boarTusk', p: 1 },
+  },
+  kobold: {
+    id: 'kobold', name: '루인 코볼트 센티널', level: 6, hp: 260, atk: 30, walk: 1.3, trot: 3.5, charge: 2.4,
+    aggro: 13, leash: 34, windup: 0.62, attackT: 0.42, recover: 0.85, reach: 1.25, radius: 0.34, len: 0.6, height: 1.6,
+    exp: 110, col: 45, scale: 1, shard: 0xffb8a0, sound: 'growl', rig: 'kobold', style: 'melee', upright: true,
+    shadow: 1.1, respawn: 45, drop: { id: 'koboldScrap', p: 0.35 },
+  },
+  koboldLord: {
+    id: 'koboldLord', name: '코볼트 로드', level: 10, hp: 3200, atk: 50, walk: 1.2, trot: 3.3, charge: 3.2,
+    aggro: 22, leash: 70, windup: 0.95, attackT: 0.5, recover: 1.15, reach: 1.2, radius: 0.36, len: 0.6, height: 1.7,
+    exp: 2600, col: 3000, scale: 2.3, shard: 0xff9a70, sound: 'roar', rig: 'koboldLord', style: 'melee', upright: true,
+    boss: true, floorBoss: true, sweep: true, shadow: 1.2, noRespawn: true, summon: 'kobold', drop: { id: 'lordCoat', p: 1 },
+  },
+  bull: {
+    id: 'bull', name: '트렘블 오록스', level: 8, hp: 320, atk: 38, walk: 1.1, trot: 3.4, charge: 10,
+    aggro: 11, leash: 40, windup: 0.8, attackT: 0.55, recover: 1.05, reach: 1.35, radius: 0.62, len: 1.8, height: 1.0,
+    exp: 150, col: 55, scale: 1.1, shard: 0xe8d0a8, sound: 'moo', rig: 'bull', style: 'charge', shadow: 2.1,
+    drop: { id: 'bullHorn', p: 0.35 },
+  },
+  wasp: {
+    id: 'wasp', name: '윈드 와스프', level: 9, hp: 200, atk: 34, walk: 2.2, trot: 4.6, charge: 9,
+    aggro: 15, leash: 42, windup: 0.6, attackT: 0.5, recover: 0.9, reach: 0.62, radius: 0.3, len: 0.9, height: 0.2,
+    exp: 170, col: 60, scale: 1.3, shard: 0xffe070, sound: 'buzz', rig: 'wasp', style: 'dive', flying: true, hover: 1.55,
+    shadow: 0.9, drop: { id: 'waspSting', p: 0.35 },
+  },
+  taurus: {
+    id: 'taurus', name: '타우러스 제너럴', level: 14, hp: 6500, atk: 70, walk: 1.1, trot: 3.1, charge: 3.4,
+    aggro: 24, leash: 60, windup: 1.05, attackT: 0.55, recover: 1.25, reach: 1.25, radius: 0.46, len: 0.7, height: 1.9,
+    exp: 5200, col: 6000, scale: 2.4, shard: 0xffc890, sound: 'roar', rig: 'taurus', style: 'melee', upright: true,
+    boss: true, sweep: true, slam: true, shadow: 1.5, respawn: 300, drop: { id: 'taurusHorn', p: 1 },
   },
 };
-
-// ---------------------------------------------------------------- geometry
-function part(geo, x, y, z, rx, ry, rz, sx, sy, sz, top, bottom = top) {
-  const g = geo.clone();
-  g.scale(sx, sy, sz);
-  g.rotateX(rx);
-  g.rotateY(ry);
-  g.rotateZ(rz);
-  g.translate(x, y, z);
-  const ng = g.index ? g.toNonIndexed() : g;
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', ng.attributes.position);
-  out.setAttribute('normal', ng.attributes.normal);
-  const p = out.attributes.position;
-  const c = new Float32Array(p.count * 3);
-  const ct = new THREE.Color(top), cb = new THREE.Color(bottom);
-  let minY = Infinity, maxY = -Infinity;
-  for (let i = 0; i < p.count; i++) { minY = Math.min(minY, p.getY(i)); maxY = Math.max(maxY, p.getY(i)); }
-  const tmp = new THREE.Color();
-  for (let i = 0; i < p.count; i++) {
-    const k = maxY > minY ? (p.getY(i) - minY) / (maxY - minY) : 1;
-    tmp.copy(cb).lerp(ct, k);
-    c[i * 3] = tmp.r; c[i * 3 + 1] = tmp.g; c[i * 3 + 2] = tmp.b;
-  }
-  out.setAttribute('color', new THREE.BufferAttribute(c, 3));
-  return out;
-}
-
-function furry(geo, amount, seed) {
-  // subtle lumpy displacement for a less "perfect sphere" look
-  const g = geo.clone();
-  const p = g.attributes.position;
-  const rng = new RNG(seed);
-  const cache = new Map();
-  for (let i = 0; i < p.count; i++) {
-    const key = `${p.getX(i).toFixed(3)},${p.getY(i).toFixed(3)},${p.getZ(i).toFixed(3)}`;
-    let k = cache.get(key);
-    if (k === undefined) { k = 1 + (rng.next() - 0.5) * amount; cache.set(key, k); }
-    p.setXYZ(i, p.getX(i) * k, p.getY(i) * k, p.getZ(i) * k);
-  }
-  g.computeVertexNormals();
-  return g;
-}
-
-const SPH = new THREE.SphereGeometry(1, 12, 8);
-const SPH_S = new THREE.SphereGeometry(1, 6, 4);
-const CONE = new THREE.ConeGeometry(1, 1, 6);
-const CYL = new THREE.CylinderGeometry(1, 1, 1, 8);
-
-function boarGeometry() {
-  const dark = '#4a3b33', mid = '#6e5a4d', belly = '#8b7565', bristle = '#241c18';
-  const parts = [
-    part(furry(SPH, 0.08, 1), 0, 0.8, -0.08, 0, 0, 0, 0.46, 0.44, 0.8, dark, belly),
-    part(furry(SPH, 0.08, 2), 0, 0.92, 0.3, 0, 0, 0, 0.45, 0.48, 0.52, dark, mid),
-    part(furry(SPH, 0.05, 3), 0, 0.74, 0.86, -0.25, 0, 0, 0.3, 0.3, 0.44, dark, mid),
-    part(CYL, 0, 0.62, 1.22, Math.PI / 2 - 0.25, 0, 0, 0.14, 0.32, 0.15, mid, mid),
-    part(CYL, 0, 0.58, 1.37, Math.PI / 2 - 0.25, 0, 0, 0.1, 0.03, 0.105, '#8a5c58', '#8a5c58'),
-    part(SPH_S, 0.16, 0.82, 1.08, 0, 0, 0, 0.035, 0.035, 0.035, '#0c0808'),
-    part(SPH_S, -0.16, 0.82, 1.08, 0, 0, 0, 0.035, 0.035, 0.035, '#0c0808'),
-    part(CONE, 0.17, 1.0, 0.76, -0.4, 0, -0.5, 0.07, 0.17, 0.05, dark, mid),
-    part(CONE, -0.17, 1.0, 0.76, -0.4, 0, 0.5, 0.07, 0.17, 0.05, dark, mid),
-    part(CONE, 0.13, 0.64, 1.3, -0.6, 0, -0.45, 0.035, 0.24, 0.035, '#f4ecd8', '#d9ccb0'),
-    part(CONE, -0.13, 0.64, 1.3, -0.6, 0, 0.45, 0.035, 0.24, 0.035, '#f4ecd8', '#d9ccb0'),
-    part(CYL, 0, 0.82, -0.88, 0.9, 0, 0, 0.025, 0.3, 0.025, dark),
-  ];
-  for (let i = 0; i < 9; i++) {
-    const z = -0.5 + i * 0.13;
-    const y = 1.18 + Math.sin((i / 8) * Math.PI) * 0.14;
-    parts.push(part(CONE, 0, y, z, -0.5, 0, 0, 0.07, 0.24, 0.05, bristle));
-  }
-  return mergeGeometries(parts);
-}
-
-function boarLeg() {
-  return mergeGeometries([
-    part(CYL, 0, -0.26, 0, 0, 0, 0, 0.08, 0.52, 0.08, '#4a3b33', '#3a2e28'),
-    part(CYL, 0, -0.55, 0.01, 0, 0, 0, 0.06, 0.09, 0.07, '#1a1512'),
-  ]);
-}
-
-function wolfGeometry() {
-  const back = '#50555e', mid = '#7c8088', belly = '#c3bfb7';
-  const parts = [
-    part(furry(SPH, 0.06, 4), 0, 0.9, -0.1, 0, 0, 0, 0.3, 0.33, 0.72, back, belly),
-    part(furry(SPH, 0.07, 5), 0, 0.95, 0.35, 0, 0, 0, 0.33, 0.42, 0.42, back, belly),
-    part(CYL, 0, 1.08, 0.62, -0.9, 0, 0, 0.16, 0.36, 0.18, back, mid),
-    part(furry(SPH, 0.04, 6), 0, 1.16, 0.82, 0, 0, 0, 0.21, 0.2, 0.26, back, mid),
-    part(CONE, 0, 1.1, 1.1, Math.PI / 2, 0, 0, 0.1, 0.34, 0.09, mid, mid),
-    part(SPH_S, 0, 1.1, 1.27, 0, 0, 0, 0.035, 0.03, 0.035, '#0a0a0a'),
-    part(SPH_S, 0.1, 1.22, 0.99, 0, 0, 0, 0.03, 0.025, 0.02, '#ffcc33'),
-    part(SPH_S, -0.1, 1.22, 0.99, 0, 0, 0, 0.03, 0.025, 0.02, '#ffcc33'),
-    part(CONE, 0.11, 1.38, 0.76, -0.15, 0, -0.15, 0.065, 0.2, 0.04, back, mid),
-    part(CONE, -0.11, 1.38, 0.76, -0.15, 0, 0.15, 0.065, 0.2, 0.04, back, mid),
-    part(CONE, 0, 0.8, -0.95, -2.3, 0, 0, 0.11, 0.62, 0.11, mid, back),
-  ];
-  // neck ruff
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    parts.push(part(CONE, Math.sin(a) * 0.2, 1.05 + Math.cos(a) * 0.12, 0.55, -1.2, 0, a, 0.08, 0.22, 0.06, mid, back));
-  }
-  return mergeGeometries(parts);
-}
-
-function wolfLeg() {
-  return mergeGeometries([
-    part(CYL, 0, -0.33, 0, 0, 0, 0, 0.06, 0.66, 0.06, '#50555e', '#8a8d93'),
-    part(SPH_S, 0, -0.66, 0.03, 0, 0, 0, 0.06, 0.04, 0.08, '#3a3d42'),
-  ]);
-}
-
-const HIPS = {
-  boar: [[0.25, 0.6, 0.45], [-0.25, 0.6, 0.45], [0.25, 0.6, -0.5], [-0.25, 0.6, -0.5]],
-  wolf: [[0.17, 0.72, 0.42], [-0.17, 0.72, 0.42], [0.17, 0.72, -0.5], [-0.17, 0.72, -0.5]],
-};
-const LEG_PHASE = [0, Math.PI, Math.PI, 0];
 
 // ---------------------------------------------------------------- name/HP bar
 class Bar {
@@ -151,6 +69,7 @@ class Bar {
     this.sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
     this.sprite.scale.set(1.2, 0.45, 1);
     this.sprite.renderOrder = 15;
+    this.sprite.visible = false;
     this.key = '';
   }
   draw(m) {
@@ -160,7 +79,6 @@ class Bar {
     this.key = key;
     const g = this.c.getContext('2d');
     g.clearRect(0, 0, 320, 120);
-    // cursor
     g.fillStyle = m.aggro ? '#ff4a5a' : '#ff9aa6';
     g.beginPath();
     g.moveTo(160 - 14, 4);
@@ -191,7 +109,7 @@ class Bar {
 
 // ---------------------------------------------------------------- segment math
 const _d1 = new THREE.Vector3(), _d2 = new THREE.Vector3(), _r = new THREE.Vector3();
-function segSegDist(p1, q1, p2, q2, outA, outB) {
+export function segSegDist(p1, q1, p2, q2, outA, outB) {
   _d1.subVectors(q1, p1);
   _d2.subVectors(q2, p2);
   _r.subVectors(p1, p2);
@@ -216,95 +134,227 @@ function segSegDist(p1, q1, p2, q2, outA, outB) {
   return outA.distanceTo(outB);
 }
 
+const ease = (k) => 1 - Math.pow(1 - THREE.MathUtils.clamp(k, 0, 1), 2.4);
+const REST_ARM = -0.35;
+
 // ---------------------------------------------------------------- system
 export class Monsters {
-  constructor(scene, game) {
-    this.scene = scene;
+  /**
+   * cfg: { height(x,z), colliders?, keepOut?(pos, r), spawns: [{ type, x, z, dormant?, noRespawn? }], seed? }
+   */
+  constructor(scene, game, cfg) {
+    this.group = new THREE.Group();
+    this.group.name = 'monsters';
+    scene.add(this.group);
     this.game = game;
+    this.cfg = cfg;
+    this.h = cfg.height;
     this.list = [];
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 });
-    this.mat = mat;
-    const counts = { boar: 15, wolf: 11 };
-    this.meshes = {};
-    const bodyGeo = { boar: boarGeometry(), wolf: wolfGeometry() };
-    const legGeo = { boar: boarLeg(), wolf: wolfLeg() };
-    for (const k of ['boar', 'wolf']) {
-      const body = new THREE.InstancedMesh(bodyGeo[k], mat, counts[k]);
-      const legs = new THREE.InstancedMesh(legGeo[k], mat, counts[k] * 4);
-      for (const m of [body, legs]) {
-        m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(m.count * 3).fill(1), 3);
-        m.frustumCulled = false;
-        m.castShadow = false;
-        scene.add(m);
-      }
-      this.meshes[k] = { body, legs, used: 0 };
+    this.mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+    // count instances per rig
+    const counts = {};
+    for (const s of cfg.spawns) {
+      const rig = MONSTER_TYPES[s.type].rig;
+      counts[rig] = (counts[rig] || 0) + 1;
     }
-    this.bars = [];
+    this.rigs = {};
+    for (const [name, n] of Object.entries(counts)) {
+      const def = RIGS[name];
+      const geo = rigGeometry(name);
+      const body = this._inst(geo.body, n);
+      const parts = {};
+      for (const key of Object.keys(geo.geos)) {
+        const per = def.parts.filter((p) => p.key === key).length;
+        parts[key] = { mesh: this._inst(geo.geos[key], n * per), per };
+      }
+      // index of each part within its key group
+      const idxInKey = [];
+      const seen = {};
+      for (const p of def.parts) { idxInKey.push(seen[p.key] || 0); seen[p.key] = (seen[p.key] || 0) + 1; }
+      this.rigs[name] = { def, body, parts, idxInKey, used: 0 };
+    }
     this._m = new THREE.Matrix4();
     this._m2 = new THREE.Matrix4();
+    this._m3 = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
     this._e = new THREE.Euler();
     this._v = new THREE.Vector3();
+    this._v2 = new THREE.Vector3();
     this._s = new THREE.Vector3();
     this._c = new THREE.Color();
-    this.spawnAll();
+    this._zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.time = 0;
+    this.rng = new RNG(cfg.seed || 77);
+    for (const s of cfg.spawns) this.spawn(s.type, s.x, s.z, s);
   }
 
-  spawn(typeId, x, z, slotType = typeId === 'boss' ? 'boar' : typeId) {
+  _inst(geo, n) {
+    const m = new THREE.InstancedMesh(geo, this.mat, Math.max(1, n));
+    m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, n) * 3).fill(1), 3);
+    m.frustumCulled = false;
+    m.castShadow = false;
+    m.count = 0;
+    this.group.add(m);
+    return m;
+  }
+
+  get boss() {
+    return this.list.find((m) => m.def.boss) || null;
+  }
+
+  spawn(typeId, x, z, opts = {}) {
     const def = MONSTER_TYPES[typeId];
-    const mesh = this.meshes[slotType];
-    const slot = mesh.used++;
+    const rig = this.rigs[def.rig];
+    const slot = rig.used++;
     const bar = new Bar();
-    this.scene.add(bar.sprite);
+    this.group.add(bar.sprite);
+    const y = this.h(x, z);
     const m = {
-      def, slotType, slot, bar,
-      home: new THREE.Vector3(x, heightAt(x, z), z),
-      pos: new THREE.Vector3(x, heightAt(x, z), z),
+      def, rig, slot, bar,
+      home: new THREE.Vector3(x, y, z),
+      pos: new THREE.Vector3(x, y, z),
       vel: new THREE.Vector3(),
-      yaw: Math.random() * Math.PI * 2,
+      yaw: opts.yaw ?? Math.random() * Math.PI * 2,
       state: 'idle', t: Math.random() * 3,
       hp: def.hp, maxHp: def.hp,
-      alive: true, aggro: false,
+      alive: !opts.dormant, aggro: false,
       phase: Math.random() * 10, speed: 0,
       flash: 0, hitCd: 0, hitPlayer: false, pitch: 0, hop: 0,
-      spawnK: 1, respawn: 0, wanderTarget: null, stun: 0,
-      scale: def.scale * (def.boss ? 1 : 0.9 + Math.random() * 0.2),
+      spawnK: 1, respawn: opts.dormant ? Infinity : 0, wanderTarget: null,
+      scale: def.scale * (def.boss ? 1 : 0.92 + Math.random() * 0.16),
+      armX: REST_ARM, armY: 0, armTX: REST_ARM, armTY: 0,
+      fly: def.hover || 0, cd: 1 + Math.random() * 2, strafe: Math.random() < 0.5 ? 1 : -1,
+      atk: 'chop', phase2: false, summoned: false, dormant: !!opts.dormant,
+      noRespawn: !!(opts.noRespawn || def.noRespawn), slamCd: 4, speedMul: 1,
     };
+    if (m.dormant) m.state = 'dead';
     this.list.push(m);
     return m;
   }
 
-  spawnAll() {
-    const rng = new RNG(77);
-    // boars in the southern meadows and near the east road
-    const boarZones = [[40, 175, 45], [-45, 205, 40], [70, 225, 35], [160, 40, 35]];
-    for (let i = 0; i < 14; i++) {
-      const zc = boarZones[i % boarZones.length];
-      const a = rng.range(0, Math.PI * 2), r = rng.range(0, zc[2]);
-      this.spawn('boar', zc[0] + Math.sin(a) * r, zc[1] + Math.cos(a) * r);
+  // wake up dormant minions around a point (boss summons)
+  summon(typeId, n, around) {
+    let k = 0;
+    for (const m of this.list) {
+      if (k >= n) break;
+      if (m.def.id !== typeId || !m.dormant || m.alive) continue;
+      const a = Math.random() * Math.PI * 2;
+      const x = around.x + Math.sin(a) * 5, z = around.z + Math.cos(a) * 5;
+      m.pos.set(x, this.h(x, z), z);
+      m.home.copy(m.pos);
+      this._revive(m);
+      m.aggro = true;
+      m.state = 'chase';
+      m.fromBoss = true;
+      this.game.effects.pillar(m.pos.clone(), 0xff6a40, 0.8, 4, 1.2);
+      k++;
     }
-    const wolfZones = [[175, 250, 40], [-225, 130, 35], [110, 300, 30]];
-    for (let i = 0; i < 11; i++) {
-      const zc = wolfZones[i % wolfZones.length];
-      const a = rng.range(0, Math.PI * 2), r = rng.range(0, zc[2]);
-      this.spawn('wolf', zc[0] + Math.sin(a) * r, zc[1] + Math.cos(a) * r);
-    }
-    this.boss = this.spawn('boss', BOSS_ARENA.x, BOSS_ARENA.z, 'boar');
+    return k;
   }
 
-  // head (front) point of a monster in world space
+  _revive(m) {
+    m.alive = true;
+    m.hp = m.maxHp;
+    m.state = 'idle';
+    m.t = 1;
+    m.spawnK = 0;
+    m.aggro = false;
+    m.phase2 = false;
+    m.summoned = false;
+    m.speedMul = 1;
+    m.fly = m.def.hover || 0;
+    m.armTX = m.armX = REST_ARM;
+    m.armTY = m.armY = 0;
+  }
+
+  // world-space point on an animated part (weapon tips)
+  partPoint(m, partIdx, local, out) {
+    const p = m.rig.def.parts[partIdx];
+    const s = m.scale;
+    this._e.set(m.pitch, m.yaw, 0, 'YXZ');
+    this._q.setFromEuler(this._e);
+    this._m.compose(this._v.set(m.pos.x, m.pos.y + m.hop * s, m.pos.z), this._q, this._s.set(s, s, s));
+    this._partMatrix(m, p, this._m2);
+    return out.set(local[0], local[1], local[2]).applyMatrix4(this._m2).applyMatrix4(this._m);
+  }
+
+  bodyPoint(m, local, out) {
+    const s = m.scale;
+    this._e.set(m.pitch, m.yaw, 0, 'YXZ');
+    this._q.setFromEuler(this._e);
+    this._m.compose(this._v.set(m.pos.x, m.pos.y + m.hop * s, m.pos.z), this._q, this._s.set(s, s, s));
+    return out.set(local[0], local[1], local[2]).applyMatrix4(this._m);
+  }
+
+  // arm pitch that makes a horizontal sweep pass at chest height, whatever the size
+  sweepPitch(m) {
+    const p = m.rig.def.parts[this.weaponPart(m)];
+    const L = Math.hypot(p.tip[1], p.tip[2]);
+    const drop = p.pivot[1] - 1.15 / m.scale;
+    return -Math.acos(THREE.MathUtils.clamp(drop / L, -1, 1));
+  }
+
+  _partMatrix(m, p, out) {
+    if (p.kind === 'arm') {
+      this._e.set(m.armX, m.armY, 0, 'YXZ');
+      this._q.setFromEuler(this._e);
+      out.makeRotationFromQuaternion(this._q);
+    } else if (p.kind === 'wing') {
+      const flap = 0.25 + Math.sin(this.time * 52 + m.slot * 1.7) * 0.75;
+      this._e.set(0, p.side < 0 ? Math.PI : 0, flap, 'YXZ');
+      this._q.setFromEuler(this._e);
+      out.makeRotationFromQuaternion(this._q);
+    } else {
+      const amp = Math.min(0.7, m.speed * (m.def.upright ? 0.2 : 0.12));
+      out.makeRotationX(Math.sin(m.phase + p.phase) * amp);
+    }
+    out.setPosition(p.pivot[0], p.pivot[1], p.pivot[2]);
+    return out;
+  }
+
+  weaponPart(m) {
+    const parts = m.rig.def.parts;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (p.kind === 'arm' && (!p.show || p.show(m))) return i;
+    }
+    return -1;
+  }
+
+  // front / strike point of a monster in world space
   headPos(m, out) {
     const s = m.scale;
+    if (m.def.style === 'melee') {
+      const i = this.weaponPart(m);
+      return this.partPoint(m, i, m.rig.def.parts[i].tip, out);
+    }
+    if (m.def.flying) return this.bodyPoint(m, [0, -0.3, -0.2], out);
     return out.set(Math.sin(m.yaw) * m.def.len * 0.55 * s, m.def.height * s * 0.85, Math.cos(m.yaw) * m.def.len * 0.55 * s).add(m.pos);
   }
 
   capsule(m, a, b) {
     const s = m.scale;
-    const h = m.def.height * s;
+    const d = m.def;
     const fx = Math.sin(m.yaw), fz = Math.cos(m.yaw);
-    const L = m.def.len * 0.5 * s;
+    if (d.upright) {
+      a.set(m.pos.x, m.pos.y + 0.35 * s, m.pos.z);
+      b.set(m.pos.x + fx * 0.05 * s, m.pos.y + d.height * s * 0.92, m.pos.z + fz * 0.05 * s);
+      return;
+    }
+    if (d.flying) {
+      a.set(m.pos.x - fx * 0.45 * s, m.pos.y - 0.08 * s, m.pos.z - fz * 0.45 * s);
+      b.set(m.pos.x + fx * 0.35 * s, m.pos.y, m.pos.z + fz * 0.35 * s);
+      return;
+    }
+    const h = d.height * s;
+    const L = d.len * 0.5 * s;
     a.set(m.pos.x - fx * L * 0.8, m.pos.y + h, m.pos.z - fz * L * 0.8);
     b.set(m.pos.x + fx * L, m.pos.y + h * 0.95, m.pos.z + fz * L);
+  }
+
+  hitRadius(m) {
+    const d = m.def;
+    return (d.upright ? 0.3 : d.flying ? 0.24 : d.radius) * m.scale + 0.03;
   }
 
   // Returns list of hits for this frame's blade sweep
@@ -316,9 +366,9 @@ export class Monsters {
     const ca = new THREE.Vector3(), cb = new THREE.Vector3();
     for (const m of this.list) {
       if (!m.alive || m.spawnK < 1 || m.hitCd > 0) continue;
-      if (m.pos.distanceToSquared(sword.tip) > 36 * m.scale * m.scale) continue;
+      if (m.pos.distanceToSquared(sword.tip) > 36 * m.scale * m.scale + 9) continue;
       this.capsule(m, A, B);
-      const rad = m.def.radius * m.scale + 0.03;
+      const rad = this.hitRadius(m);
       for (let k = 0; k <= 3; k++) {
         const u = k / 3;
         s0.lerpVectors(sword.prevBase, sword.base, u);
@@ -333,12 +383,13 @@ export class Monsters {
     return hits;
   }
 
-  // parry check: blade crossing the monster's head during an attack
+  // parry check: blade crossing the monster's head / weapon during an attack
   blocks(m, sword) {
     const hp = this.headPos(m, new THREE.Vector3());
     const ca = new THREE.Vector3(), cb = new THREE.Vector3();
     const d = segSegDist(sword.base, sword.tip, hp, hp, ca, cb);
-    return d < 0.3 * m.scale;
+    const r = m.def.style === 'melee' ? 0.32 + 0.06 * m.scale : 0.3 * m.scale;
+    return d < r;
   }
 
   damage(m, amount, dir) {
@@ -349,13 +400,16 @@ export class Monsters {
     if (!m.aggro) this.game.audio.play(m.def.sound, { pos: m.pos, vol: m.def.boss ? 1 : 0.7 });
     m.aggro = true;
     if (dir && !m.def.boss) {
-      m.vel.set(dir.x, 0, dir.z).normalize().multiplyScalar(4.5);
+      m.vel.set(dir.x, 0, dir.z).normalize().multiplyScalar(m.def.flying ? 6 : 4.5);
     }
-    // bosses keep charging through hits (super armor); everyone else flinches
-    if (!(m.def.boss && (m.state === 'attack' || m.state === 'windup'))) {
+    // bosses keep attacking through hits (super armor); everyone else flinches
+    if (!(m.def.boss && (m.state === 'attack' || m.state === 'windup' || m.state === 'roar'))) {
       m.state = 'hurt';
       m.t = m.def.boss ? 0.12 : 0.28;
+      m.armTX = REST_ARM;
+      m.armTY = 0;
     }
+    if (m.def.boss) this._bossPhases(m);
     if (m.hp <= 0) {
       this.kill(m);
       return true;
@@ -363,21 +417,55 @@ export class Monsters {
     return false;
   }
 
+  _bossPhases(m) {
+    const f = m.hp / m.maxHp;
+    if (m.def.summon && !m.summoned && f < 0.55) {
+      m.summoned = true;
+      if (this.summon(m.def.summon, 2, m.pos)) this.game.onBossEvent?.(m, 'summon');
+    }
+    if (!m.phase2 && f < (m.def.floorBoss ? 0.3 : 0.5) && m.hp > 0) {
+      m.phase2 = true;
+      m.speedMul = 1.3;
+      m.state = 'roar';
+      m.t = 1.5;
+      m.slamCd = 1.5;
+      this.game.onBossEvent?.(m, 'phase2');
+    }
+  }
+
   kill(m) {
     m.alive = false;
     m.hp = 0;
     m.state = 'dead';
-    m.respawn = m.def.boss ? 90 : 22;
+    m.respawn = m.noRespawn || m.fromBoss ? Infinity : m.def.respawn ?? 22;
+    if (m.fromBoss) m.dormant = true;
     m.aggro = false;
     const center = m.pos.clone();
-    center.y += m.def.height * m.scale * 0.8;
-    this.game.effects.shatter(center, 0.6 * m.scale, m.def.shard, m.def.boss ? 260 : 80, m.def.height * m.scale);
+    center.y += m.def.height * m.scale * (m.def.flying ? 0 : 0.8);
+    this.game.effects.shatter(center, 0.6 * m.scale, m.def.shard, m.def.boss ? 260 : 80, Math.max(0.6, m.def.height * m.scale));
     this.game.audio.play('shatter', { pos: center, vol: m.def.boss ? 1.4 : 1, rate: m.def.boss ? 0.8 : 1 });
     m.bar.sprite.visible = false;
     this.game.onMonsterKilled(m);
   }
 
+  // boss gave up (player died / fled): heal back and reset its phases
+  _resetBoss(m) {
+    m.phase2 = false;
+    m.summoned = false;
+    m.speedMul = 1;
+    for (const o of this.list) {
+      if (o.fromBoss && o.alive) {
+        o.alive = false;
+        o.dormant = true;
+        o.state = 'dead';
+        o.respawn = Infinity;
+        o.bar.sprite.visible = false;
+      }
+    }
+  }
+
   update(dt, player) {
+    this.time += dt;
     const pp = player.feet;
     const safe = player.inTown;
     for (const m of this.list) this._updateOne(m, dt, pp, safe, player);
@@ -402,42 +490,71 @@ export class Monsters {
     this._render(player);
   }
 
+  _startAttack(m, dist) {
+    const d = m.def;
+    m.state = 'windup';
+    m.t = d.windup * (m.phase2 ? 0.72 : 1);
+    m.hitPlayer = false;
+    if (d.style === 'melee') {
+      const canSlam = (d.slam || m.phase2) && m.slamCd <= 0 && dist > 2.5 * m.scale * 0.5;
+      if (canSlam && Math.random() < (m.phase2 ? 0.45 : 0.3)) {
+        m.atk = 'slam';
+        m.t *= 1.25;
+        m.slamCd = m.phase2 ? 5 : 8;
+        const tp = this.game.player.feet;
+        m.slamAt = new THREE.Vector3(tp.x, 0, tp.z);
+        const R = this.slamRadius(m);
+        this.game.effects.telegraph(new THREE.Vector3(tp.x, this.h(tp.x, tp.z), tp.z), R, m.t + d.attackT, 0xff3a2a);
+      } else {
+        m.atk = d.sweep && Math.random() < 0.4 ? 'sweep' : 'chop';
+      }
+      if (m.atk === 'sweep') { m.armTX = this.sweepPitch(m); m.armTY = -1.5; }
+      else { m.armTX = -3.3; m.armTY = 0; }
+    }
+    this.game.audio.play(d.sound, { pos: m.pos, vol: d.boss ? 1.2 : 0.8, rate: (d.boss ? 0.9 : 1) + Math.random() * 0.2 });
+  }
+
+  slamRadius(m) {
+    return 1.8 * m.scale;
+  }
+
   _updateOne(m, dt, pp, safe, player) {
     const def = m.def;
     if (!m.alive) {
       m.respawn -= dt;
       if (m.respawn <= 0) {
-        m.alive = true;
-        m.hp = m.maxHp;
+        this._revive(m);
         m.pos.copy(m.home);
-        m.state = 'idle';
-        m.spawnK = 0;
-        m.aggro = false;
       }
       return;
     }
     m.spawnK = Math.min(1, m.spawnK + dt * 1.5);
     m.flash = Math.max(0, m.flash - dt * 5);
     m.hitCd = Math.max(0, m.hitCd - dt);
+    m.slamCd -= dt;
+    m.cd -= dt;
     m.t -= dt;
     const dx = pp.x - m.pos.x, dz = pp.z - m.pos.z;
     const dist = Math.hypot(dx, dz);
     const toYaw = Math.atan2(dx, dz);
-    const homeDist = m.pos.distanceTo(m.home);
+    const homeDist = Math.hypot(m.pos.x - m.home.x, m.pos.z - m.home.z);
     let targetSpeed = 0;
     let faceYaw = null;
-    const alive = player.hp > 0;
+    const alive = player.hp > 0 && !player.dead;
+    const sp = m.speedMul;
 
     if ((safe || !alive) && m.aggro && m.state !== 'return') {
       m.aggro = false;
       m.state = 'return';
+      m.armTX = REST_ARM;
+      m.armTY = 0;
     }
 
     switch (m.state) {
       case 'idle':
         if (m.t <= 0) {
           m.state = 'wander';
-          const a = Math.random() * Math.PI * 2, r = Math.random() * 10;
+          const a = Math.random() * Math.PI * 2, r = Math.random() * (def.boss ? 4 : 10);
           m.wanderTarget = new THREE.Vector3(m.home.x + Math.sin(a) * r, 0, m.home.z + Math.cos(a) * r);
           m.t = 6;
         }
@@ -455,58 +572,74 @@ export class Monsters {
       }
       case 'chase':
         faceYaw = toYaw;
-        targetSpeed = def.trot;
-        if (dist < def.reach * m.scale + 1.6 + (def.id === 'wolf' ? 0.8 : 0)) {
-          m.state = 'windup';
-          m.t = def.windup;
-          this.game.audio.play(def.sound, { pos: m.pos, vol: def.boss ? 1.2 : 0.8, rate: 0.9 + Math.random() * 0.2 });
-        } else if (homeDist > def.leash) {
+        if (def.style === 'dive') {
+          // circle the player at a distance, then dive in
+          if (dist > 4.6) targetSpeed = def.trot;
+          else if (dist < 2.6) targetSpeed = -def.walk;
+          else {
+            m.pos.x += Math.cos(toYaw) * m.strafe * def.walk * 0.8 * dt;
+            m.pos.z -= Math.sin(toYaw) * m.strafe * def.walk * 0.8 * dt;
+            if (Math.random() < dt * 0.3) m.strafe *= -1;
+          }
+          if (m.cd <= 0 && dist < 5.5 && dist > 1.6) this._startAttack(m, dist);
+        } else {
+          targetSpeed = def.trot * sp;
+          const reach = def.style === 'melee' ? def.reach * m.scale + 0.7 : def.reach * m.scale + 1.6 + (def.lunge || 0) * 0.55;
+          if (dist < reach) this._startAttack(m, dist);
+        }
+        if (homeDist > def.leash) {
           m.state = 'return';
           m.aggro = false;
+          m.armTX = REST_ARM;
+          m.armTY = 0;
+        }
+        break;
+      case 'roar':
+        m.pitch = THREE.MathUtils.lerp(m.pitch, -0.2, dt * 5);
+        m.armTX = -2.6;
+        if (m.t <= 0) {
+          m.state = 'chase';
+          m.armTX = REST_ARM;
         }
         break;
       case 'windup':
-        faceYaw = toYaw;
-        m.pitch = THREE.MathUtils.lerp(m.pitch, -0.18, dt * 8);
+        faceYaw = def.style === 'melee' && m.atk === 'slam' ? Math.atan2(m.slamAt.x - m.pos.x, m.slamAt.z - m.pos.z) : toYaw;
+        if (def.style === 'dive') {
+          m.fly = THREE.MathUtils.lerp(m.fly, def.hover + 0.6, dt * 3);
+          targetSpeed = -0.8;
+          m.pitch = THREE.MathUtils.lerp(m.pitch, -0.9, dt * 6);
+        } else if (def.style === 'melee') {
+          m.pitch = THREE.MathUtils.lerp(m.pitch, m.atk === 'slam' ? -0.12 : 0.05, dt * 6);
+        } else {
+          m.pitch = THREE.MathUtils.lerp(m.pitch, -0.18, dt * 8);
+        }
         if (m.t <= 0) {
           m.state = 'attack';
-          m.t = def.attackT;
+          m.t = def.attackT * (m.atk === 'slam' ? 1.5 : 1);
           m.hitPlayer = false;
           m.attackDir = new THREE.Vector3(Math.sin(m.yaw), 0, Math.cos(m.yaw));
-        }
-        break;
-      case 'attack': {
-        const k = 1 - m.t / def.attackT;
-        m.pitch = THREE.MathUtils.lerp(m.pitch, 0.12, dt * 10);
-        m.pos.addScaledVector(m.attackDir, def.charge * dt * (1 - k * 0.5));
-        if (def.id === 'wolf') m.hop = Math.sin(k * Math.PI) * 0.6;
-        m.speed = def.charge;
-        if (!m.hitPlayer && alive) {
-          const hp = this.headPos(m, this._v);
-          const bx = hp.x - pp.x, bz = hp.z - pp.z;
-          const reach = 0.55 * m.scale + 0.25;
-          if (bx * bx + bz * bz < reach * reach) {
-            m.hitPlayer = true;
-            if (this.game.sword && this.blocks(m, this.game.sword)) {
-              this.game.onParry(m, hp.clone());
-              m.state = 'recover';
-              m.t = def.recover * 1.6;
-              m.vel.copy(m.attackDir).multiplyScalar(-5);
-              break;
-            }
-            this.game.onPlayerHit(m, Math.round(def.atk * (0.85 + Math.random() * 0.3)), m.attackDir.clone());
+          if (def.style === 'dive') {
+            const head = this.game.player.head;
+            const from = this.headPos(m, new THREE.Vector3());
+            m.attackDir.set(head.x, head.y - 0.35, head.z).sub(from).normalize();
           }
-        }
-        if (m.t <= 0) {
-          m.state = 'recover';
-          m.t = def.recover;
-          m.hop = 0;
+          if (m.atk === 'slam') m.slamFrom = m.pos.clone();
         }
         break;
-      }
+      case 'attack':
+        this._attack(m, dt, pp, alive);
+        break;
       case 'recover':
         m.pitch = THREE.MathUtils.lerp(m.pitch, 0, dt * 5);
-        if (m.t <= 0) m.state = m.aggro ? 'chase' : 'idle';
+        if (def.style === 'dive') {
+          m.fly = THREE.MathUtils.lerp(m.fly, def.hover, dt * 2.5);
+          targetSpeed = -def.walk * 0.6;
+          faceYaw = toYaw;
+        }
+        if (m.t <= 0) {
+          m.state = m.aggro ? 'chase' : 'idle';
+          m.cd = 1.8 + Math.random() * 2.2;
+        }
         break;
       case 'hurt':
         m.pitch = THREE.MathUtils.lerp(m.pitch, 0.1, dt * 10);
@@ -517,19 +650,28 @@ export class Monsters {
         faceYaw = Math.atan2(hx, hz);
         targetSpeed = def.trot;
         m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.15 * dt);
+        if (m.hp >= m.maxHp && def.boss && (m.phase2 || m.summoned)) this._resetBoss(m);
         if (Math.hypot(hx, hz) < 1.5) {
           m.state = 'idle';
           m.t = 2;
+          if (def.boss) { m.hp = m.maxHp; this._resetBoss(m); }
         }
         break;
       }
     }
     // aggro checks
-    if ((m.state === 'idle' || m.state === 'wander') && !safe && alive && dist < def.aggro) {
+    if ((m.state === 'idle' || m.state === 'wander') && !safe && alive && dist < def.aggro && Math.abs(pp.y - m.pos.y) < 6) {
       m.aggro = true;
       m.state = 'chase';
       this.game.audio.play(def.sound, { pos: m.pos, vol: def.boss ? 1.4 : 0.7 });
       if (def.boss) this.game.onBossAggro(m);
+    }
+
+    // arm easing (weapon wielders)
+    if (def.style === 'melee' && m.state !== 'attack') {
+      const k = Math.min(1, dt * (m.state === 'windup' ? 7 : 4));
+      m.armX += (m.armTX - m.armX) * k;
+      m.armY += (m.armTY - m.armY) * k;
     }
 
     // movement
@@ -545,67 +687,216 @@ export class Monsters {
     }
     m.pos.addScaledVector(m.vel, dt);
     m.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
-    // stay out of town
-    const r = Math.hypot(m.pos.x, m.pos.z);
-    const minR = TOWN.safeR + 4 + m.def.radius * m.scale;
-    if (r < minR) {
-      m.pos.x *= minR / r;
-      m.pos.z *= minR / r;
+    const rad = def.radius * m.scale;
+    if (this.cfg.colliders && !def.flying) this.cfg.colliders.resolve(m.pos, rad * 0.8);
+    if (this.cfg.keepOut) this.cfg.keepOut(m.pos, rad);
+    const ground = this.h(m.pos.x, m.pos.z);
+    if (def.flying) {
+      if (m.state === 'idle' || m.state === 'wander' || m.state === 'chase' || m.state === 'return') {
+        m.fly = THREE.MathUtils.lerp(m.fly, def.hover, dt * 2);
+      }
+      m.fly = Math.max(0.45, m.fly);
+      m.pos.y = ground + m.fly + Math.sin(this.time * 2.3 + m.slot) * 0.08;
+      if (m.state !== 'windup' && m.state !== 'attack') m.pitch = THREE.MathUtils.lerp(m.pitch, 0.08, dt * 3);
+    } else {
+      m.pos.y = ground;
     }
-    m.pos.y = heightAt(m.pos.x, m.pos.z);
-    m.phase += dt * (m.speed * 3.2 / Math.max(0.6, m.scale));
+    m.phase += dt * (Math.abs(m.speed) * 3.2 / Math.max(0.6, m.scale));
+  }
+
+  _attack(m, dt, pp, alive) {
+    const def = m.def;
+    const T = def.attackT * (m.atk === 'slam' ? 1.5 : 1);
+    const k = 1 - m.t / T;
+    const player = this.game.player;
+    if (def.style === 'melee') {
+      if (m.atk === 'slam') {
+        // leap onto the marked spot, hammer / axe first
+        const to = m.slamAt;
+        const u = ease(k);
+        m.pos.x = THREE.MathUtils.lerp(m.slamFrom.x, to.x - Math.sin(m.yaw) * 1.1 * m.scale, u);
+        m.pos.z = THREE.MathUtils.lerp(m.slamFrom.z, to.z - Math.cos(m.yaw) * 1.1 * m.scale, u);
+        m.hop = Math.sin(k * Math.PI) * 0.9;
+        m.armX = THREE.MathUtils.lerp(-3.4, -0.4, ease(Math.max(0, (k - 0.45) / 0.55)));
+        m.pitch = THREE.MathUtils.lerp(m.pitch, 0.15, dt * 6);
+        if (m.t <= 0) {
+          m.hop = 0;
+          const R = this.slamRadius(m);
+          const ip = new THREE.Vector3(to.x, this.h(to.x, to.z), to.z);
+          this.game.onSlam?.(m, ip, R);
+          if (alive && Math.hypot(pp.x - to.x, pp.z - to.z) < R && !player.airborne) {
+            const dir = new THREE.Vector3(pp.x - to.x, 0, pp.z - to.z);
+            if (dir.lengthSq() < 1e-4) dir.set(Math.sin(m.yaw), 0, Math.cos(m.yaw));
+            this.game.onPlayerHit(m, Math.round(def.atk * 1.35 * (0.9 + Math.random() * 0.2)), dir.normalize());
+          }
+          m.state = 'recover';
+          m.t = def.recover * 1.2;
+          m.armTX = REST_ARM;
+        }
+        return;
+      }
+      if (m.atk === 'sweep') {
+        m.armX = m.armTX;
+        m.armY = THREE.MathUtils.lerp(-1.5, 1.5, ease(k));
+      } else {
+        m.armX = THREE.MathUtils.lerp(-3.3, -0.35, ease(k));
+        m.armY = 0;
+      }
+      m.pitch = THREE.MathUtils.lerp(m.pitch, 0.12, dt * 8);
+      m.speed = def.charge * (1 - k);
+      m.pos.addScaledVector(m.attackDir, def.charge * dt * (1 - k));
+      if (!m.hitPlayer && alive && k > 0.2 && k < 0.9) {
+        const tip = this.headPos(m, this._v);
+        const bx = tip.x - pp.x, bz = tip.z - pp.z;
+        const r = 0.55 + 0.1 * m.scale;
+        const inY = tip.y > pp.y - 0.3 && tip.y < player.head.y + 0.4;
+        if (bx * bx + bz * bz < r * r && inY) {
+          m.hitPlayer = true;
+          if (this.game.sword && this.blocks(m, this.game.sword)) {
+            this.game.onParry(m, tip.clone());
+            m.state = 'recover';
+            m.t = def.recover * 1.6;
+            m.armTX = REST_ARM;
+            m.armTY = 0;
+            m.vel.copy(m.attackDir).multiplyScalar(-4);
+            return;
+          }
+          this.game.onPlayerHit(m, Math.round(def.atk * (0.85 + Math.random() * 0.3)), m.attackDir.clone());
+        }
+      }
+      if (m.t <= 0) {
+        m.state = 'recover';
+        m.t = def.recover * (m.phase2 ? 0.75 : 1);
+        m.armTX = REST_ARM;
+        m.armTY = 0;
+      }
+      return;
+    }
+    if (def.style === 'dive') {
+      m.pitch = THREE.MathUtils.lerp(m.pitch, -1.1, dt * 10);
+      const v = def.charge * (1 - k * 0.4);
+      m.pos.x += m.attackDir.x * v * dt;
+      m.pos.z += m.attackDir.z * v * dt;
+      m.fly += m.attackDir.y * v * dt;
+      m.speed = v;
+      if (!m.hitPlayer && alive) {
+        const hp = this.headPos(m, this._v);
+        const head = player.head;
+        const chest = this._v2.set(head.x, head.y - 0.35, head.z);
+        // distance from the stinger to the player's body (a short vertical segment)
+        const dy = hp.y > head.y ? hp.y - head.y : hp.y < pp.y + 0.5 ? pp.y + 0.5 - hp.y : 0;
+        const dxz = Math.hypot(hp.x - chest.x, hp.z - chest.z);
+        if (Math.hypot(dxz, dy) < def.reach * m.scale * 0.6 + 0.2) {
+          m.hitPlayer = true;
+          if (this.game.sword && this.blocks(m, this.game.sword)) {
+            this.game.onParry(m, hp.clone());
+            m.state = 'recover';
+            m.t = def.recover * 1.5;
+            m.vel.copy(m.attackDir).setY(0).multiplyScalar(-6);
+            return;
+          }
+          this.game.onPlayerHit(m, Math.round(def.atk * (0.85 + Math.random() * 0.3)), m.attackDir.clone());
+        }
+      }
+      if (m.t <= 0) {
+        m.state = 'recover';
+        m.t = def.recover;
+      }
+      return;
+    }
+    // charge (beasts)
+    m.pitch = THREE.MathUtils.lerp(m.pitch, 0.12, dt * 10);
+    m.pos.addScaledVector(m.attackDir, def.charge * dt * (1 - k * 0.5));
+    if (def.lunge) m.hop = Math.sin(k * Math.PI) * 0.6;
+    m.speed = def.charge;
+    if (!m.hitPlayer && alive) {
+      const hp = this.headPos(m, this._v);
+      const bx = hp.x - pp.x, bz = hp.z - pp.z;
+      const reach = 0.55 * m.scale + 0.25;
+      if (bx * bx + bz * bz < reach * reach) {
+        m.hitPlayer = true;
+        if (this.game.sword && this.blocks(m, this.game.sword)) {
+          this.game.onParry(m, hp.clone());
+          m.state = 'recover';
+          m.t = def.recover * 1.6;
+          m.vel.copy(m.attackDir).multiplyScalar(-5);
+          m.hop = 0;
+          return;
+        }
+        this.game.onPlayerHit(m, Math.round(def.atk * (0.85 + Math.random() * 0.3)), m.attackDir.clone());
+      }
+    }
+    if (m.t <= 0) {
+      m.state = 'recover';
+      m.t = def.recover;
+      m.hop = 0;
+    }
   }
 
   _render(player) {
-    for (const k of ['boar', 'wolf']) this.meshes[k].dirty = false;
     const cam = player.head;
+    const now = performance.now();
+    for (const r of Object.values(this.rigs)) r.dirty = false;
     for (const m of this.list) {
-      const mesh = this.meshes[m.slotType];
+      const rig = m.rig;
+      const def = m.def;
       const s = m.alive ? m.scale * m.spawnK : 0;
-      const bob = Math.abs(Math.sin(m.phase)) * 0.03 * Math.min(1, m.speed / 3) * m.scale;
+      if (s === 0) {
+        rig.body.setMatrixAt(m.slot, this._zero);
+        rig.def.parts.forEach((p, i) => {
+          const pm = rig.parts[p.key];
+          pm.mesh.setMatrixAt(m.slot * pm.per + rig.idxInKey[i], this._zero);
+        });
+        m.bar.sprite.visible = false;
+        continue;
+      }
+      const bob = def.flying ? 0 : Math.abs(Math.sin(m.phase)) * 0.03 * Math.min(1, Math.abs(m.speed) / 3) * m.scale;
       this._e.set(m.pitch, m.yaw, 0, 'YXZ');
       this._q.setFromEuler(this._e);
       this._v.set(m.pos.x, m.pos.y + bob + m.hop * m.scale, m.pos.z);
       this._m.compose(this._v, this._q, this._s.set(s, s, s));
-      mesh.body.setMatrixAt(m.slot, this._m);
-      // color: flash white on hit, reddish tint during windup, boss tint
-      const base = m.def.boss ? [0.85, 0.55, 0.5] : [1, 1, 1];
-      const wind = m.state === 'windup' ? 0.4 + 0.4 * Math.sin(performance.now() / 50) : 0;
+      rig.body.setMatrixAt(m.slot, this._m);
+      // color: flash white on hit, reddish tint during windup / enraged bosses
+      const base = def.tint || (m.phase2 ? [1.25, 0.7, 0.62] : [1, 1, 1]);
+      const wind = m.state === 'windup' || m.state === 'roar' ? 0.4 + 0.4 * Math.sin(now / 50) : 0;
       this._c.setRGB(base[0] + m.flash * 3 + wind, base[1] + m.flash * 3, base[2] + m.flash * 3);
-      mesh.body.setColorAt(m.slot, this._c);
-      const hips = HIPS[m.slotType];
-      const amp = Math.min(0.7, m.speed * 0.12);
-      for (let i = 0; i < 4; i++) {
-        const swing = Math.sin(m.phase + LEG_PHASE[i]) * amp;
-        this._m2.makeRotationX(swing);
-        this._m2.setPosition(hips[i][0], hips[i][1], hips[i][2]);
-        const lm = this._m.clone().multiply(this._m2);
-        mesh.legs.setMatrixAt(m.slot * 4 + i, lm);
-        mesh.legs.setColorAt(m.slot * 4 + i, this._c);
-      }
-      mesh.dirty = true;
+      rig.body.setColorAt(m.slot, this._c);
+      rig.def.parts.forEach((p, i) => {
+        const pm = rig.parts[p.key];
+        const idx = m.slot * pm.per + rig.idxInKey[i];
+        if (p.show && !p.show(m)) {
+          pm.mesh.setMatrixAt(idx, this._zero);
+          return;
+        }
+        this._partMatrix(m, p, this._m2);
+        this._m3.multiplyMatrices(this._m, this._m2);
+        pm.mesh.setMatrixAt(idx, this._m3);
+        pm.mesh.setColorAt(idx, this._c);
+      });
       // bar
       const bar = m.bar;
-      if (m.alive && cam) {
+      if (cam) {
         const d = cam.distanceTo(m.pos);
-        const show = d < (m.def.boss ? 45 : 22) && m.spawnK >= 1;
+        const show = d < (def.boss ? 50 : 22) && m.spawnK >= 1;
         bar.sprite.visible = show;
         if (show) {
           bar.draw(m);
-          bar.sprite.position.set(m.pos.x, m.pos.y + (m.def.height + 0.75) * m.scale + 0.2, m.pos.z);
-          const sc = m.def.boss ? 2.2 : 1;
+          const top = def.flying ? 0.7 : def.height + 0.75;
+          bar.sprite.position.set(m.pos.x, m.pos.y + top * m.scale + 0.25, m.pos.z);
+          const sc = def.boss ? 2.2 : 1;
           bar.sprite.scale.set(1.2 * sc, 0.45 * sc, 1);
         }
       } else bar.sprite.visible = false;
     }
-    for (const k of ['boar', 'wolf']) {
-      const mesh = this.meshes[k];
-      mesh.body.count = mesh.used;
-      mesh.legs.count = mesh.used * 4;
-      mesh.body.instanceMatrix.needsUpdate = true;
-      mesh.legs.instanceMatrix.needsUpdate = true;
-      mesh.body.instanceColor.needsUpdate = true;
-      mesh.legs.instanceColor.needsUpdate = true;
+    for (const r of Object.values(this.rigs)) {
+      r.body.count = r.used;
+      r.body.instanceMatrix.needsUpdate = true;
+      r.body.instanceColor.needsUpdate = true;
+      for (const pm of Object.values(r.parts)) {
+        pm.mesh.count = r.used * pm.per;
+        pm.mesh.instanceMatrix.needsUpdate = true;
+        pm.mesh.instanceColor.needsUpdate = true;
+      }
     }
   }
 
@@ -617,5 +908,20 @@ export class Monsters {
       if (d < bd) { bd = d; best = m; }
     }
     return best;
+  }
+
+  // reset aggro when the player leaves this map
+  calm() {
+    for (const m of this.list) {
+      if (!m.alive) continue;
+      if (m.aggro) {
+        m.aggro = false;
+        m.state = 'return';
+      }
+    }
+  }
+
+  setVisible(v) {
+    this.group.visible = v;
   }
 }

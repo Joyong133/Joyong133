@@ -67,7 +67,9 @@ function hills(x, z, octaves) {
   return Math.max(v, -3) + 3;
 }
 
-export function heightAt(x, z) {
+// Floor-1 terrain. Everything else goes through heightAt(), which follows
+// whichever map (floor 1, labyrinth, floor 2…) the player is currently on.
+export function heightF1(x, z) {
   const r = Math.hypot(x, z);
   if (r < 113) return 0;
   const out = smoothstep(113, 175, r);
@@ -96,6 +98,14 @@ export function heightAt(x, z) {
   h = flatSpot(x, z, TOWER, TOWER.r + 6, TOWER.r + 40, h, 6);
   h = flatSpot(x, z, OVERLOOK, 18, 40, h, 8);
   return h;
+}
+
+let activeHeight = heightF1;
+export function setActiveHeight(fn) {
+  activeHeight = fn;
+}
+export function heightAt(x, z) {
+  return activeHeight(x, z);
 }
 
 export function isInTown(x, z) {

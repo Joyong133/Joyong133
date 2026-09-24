@@ -3,7 +3,36 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG, fbm, vnoise } from '../core/noise.js';
-import { heightAt, roadDistance, LAKE, OUTPOST, BOSS_ARENA, OVERLOOK, TOWER, WORLD_R, TOWN } from './layout.js';
+import { heightF1, roadDistance, LAKE, OUTPOST, BOSS_ARENA, OVERLOOK, TOWER, WORLD_R, TOWN } from './layout.js';
+
+// Floor-1 scattering rules. Other floors pass their own config.
+export const VEG_F1 = {
+  seed: 2024,
+  height: heightF1,
+  okSpot(x, z, clear = 5) {
+    const r = Math.hypot(x, z);
+    if (r < TOWN.wallR + 16 || r > WORLD_R - 12) return false;
+    if (roadDistance(x, z) < clear + 2) return false;
+    if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 4) return false;
+    for (const [p, rr] of [[OUTPOST, 26], [BOSS_ARENA, 40], [OVERLOOK, 30]]) if (Math.hypot(x - p.x, z - p.z) < rr) return false;
+    if (Math.hypot(x - TOWER.x, z - TOWER.z) < TOWER.r + 14) return false;
+    return true;
+  },
+  forests: [
+    { x: -270, z: 60, r: 75, pine: 0.35, n: 110 },
+    { x: 180, z: 235, r: 60, pine: 0.2, n: 70 },
+    { x: 230, z: -210, r: 85, pine: 0.8, n: 110 },
+    { x: -60, z: -290, r: 75, pine: 0.9, n: 90 },
+    { x: -250, z: 300, r: 55, pine: 0.6, n: 60 },
+    { x: 330, z: 110, r: 60, pine: 0.4, n: 60 },
+    { x: -200, z: -170, r: 60, pine: 0.7, n: 60 },
+  ],
+  meadow: { n: 90, rmin: 140, rmax: 470, pine: 0.25 },
+  lake: LAKE,
+  bushes: 380,
+  rocks: { n: 170, rmin: 125, rmax: 490 },
+  edgeRocks: true,
+};
 
 const windUniform = { value: 0 };
 
@@ -162,6 +191,8 @@ function addWind(material, amount = 0.06, start = 3.5) {
   transformed.z += sin(windTime * 1.7 + wph * 1.3) * ${(amount * 0.6).toFixed(3)} * wk;`
       );
   };
+  // constants are baked into the source: keep leaf and pine programs apart
+  material.customProgramCacheKey = () => `wind-${amount}-${start}`;
 }
 
 function oakLowGeometry(seed) {
@@ -265,7 +296,7 @@ function makeInstanced(geo, material, list, castShadow = false) {
 }
 
 // ----------------------------------------------------------------- GPU grass
-function buildGrass(heightTex, quality) {
+function buildGrass(heightTex, quality, tips = [[0.2, 0.36, 0.08], [0.36, 0.42, 0.13]]) {
   const cfg = { low: [0.6, 14], medium: [0.5, 22], high: [0.42, 28] }[quality] || [0.5, 22];
   const [cell, radius] = cfg;
   const N = Math.ceil((radius * 2) / cell);
@@ -311,6 +342,8 @@ function buildGrass(heightTex, quality) {
         cell: { value: cell },
         radius: { value: radius },
         time: { value: 0 },
+        tipA: { value: new THREE.Vector3(...tips[0]) },
+        tipB: { value: new THREE.Vector3(...tips[1]) },
       },
     ]),
     vertexShader: /* glsl */ `
@@ -320,7 +353,7 @@ function buildGrass(heightTex, quality) {
       attribute float bladeH;
       uniform sampler2D hMap;
       uniform float hExtent, cell, radius, time;
-      uniform vec3 center;
+      uniform vec3 center, tipA, tipB;
       varying float vH;
       varying vec3 vTip;
       varying float vShade;
@@ -348,8 +381,6 @@ function buildGrass(heightTex, quality) {
         p.z += w * 0.07 * bend * h;
         vec3 world = vec3(wp.x + p.x, hm.r + p.y - 0.03, wp.y + p.z);
         vH = bladeH;
-        vec3 tipA = vec3(0.2, 0.36, 0.08);
-        vec3 tipB = vec3(0.36, 0.42, 0.13);
         vTip = mix(tipA, tipB, r1 * r1);
         if (flower) {
           vTip = r2 < 0.33 ? vec3(1.0, 0.95, 0.9) : r2 < 0.66 ? vec3(1.0, 0.8, 0.15) : vec3(0.6, 0.35, 1.0);
@@ -385,10 +416,11 @@ function buildGrass(heightTex, quality) {
 }
 
 // ----------------------------------------------------------------- main
-export function buildVegetation(m, tex, colliders, heightTex, quality) {
+export function buildVegetation(m, tex, colliders, heightTex, quality, cfg = VEG_F1) {
   const group = new THREE.Group();
   group.name = 'vegetation';
-  const rng = new RNG(2024);
+  const rng = new RNG(cfg.seed);
+  const heightAt = cfg.height;
 
   const barkMat = new THREE.MeshStandardMaterial({ map: tex.rock.map, normalMap: tex.rock.normal, vertexColors: true, roughness: 0.95 });
   const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
@@ -411,25 +443,8 @@ export function buildVegetation(m, tex, colliders, heightTex, quality) {
   const bushList = [];
   const rockList = [];
 
-  const okSpot = (x, z, clear = 5) => {
-    const r = Math.hypot(x, z);
-    if (r < TOWN.wallR + 16 || r > WORLD_R - 12) return false;
-    if (roadDistance(x, z) < clear + 2) return false;
-    if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 4) return false;
-    for (const [p, rr] of [[OUTPOST, 26], [BOSS_ARENA, 40], [OVERLOOK, 30]]) if (Math.hypot(x - p.x, z - p.z) < rr) return false;
-    if (Math.hypot(x - TOWER.x, z - TOWER.z) < TOWER.r + 14) return false;
-    return true;
-  };
-
-  const forests = [
-    { x: -270, z: 60, r: 75, pine: 0.35, n: 110 },
-    { x: 180, z: 235, r: 60, pine: 0.2, n: 70 },
-    { x: 230, z: -210, r: 85, pine: 0.8, n: 110 },
-    { x: -60, z: -290, r: 75, pine: 0.9, n: 90 },
-    { x: -250, z: 300, r: 55, pine: 0.6, n: 60 },
-    { x: 330, z: 110, r: 60, pine: 0.4, n: 60 },
-    { x: -200, z: -170, r: 60, pine: 0.7, n: 60 },
-  ];
+  const okSpot = cfg.okSpot;
+  const forests = cfg.forests;
   const place = (x, z, pineProb) => {
     const y = heightAt(x, z);
     const s = rng.range(0.8, 1.35);
@@ -451,23 +466,24 @@ export function buildVegetation(m, tex, colliders, heightTex, quality) {
     }
   }
   // sparse solitary trees in meadows
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < cfg.meadow.n; i++) {
     const a = rng.range(0, Math.PI * 2);
-    const r = rng.range(140, 470);
+    const r = rng.range(cfg.meadow.rmin, cfg.meadow.rmax);
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
     if (!okSpot(x, z, 8)) continue;
-    place(x, z, 0.25);
+    place(x, z, cfg.meadow.pine);
   }
   // lake ring
-  for (let i = 0; i < 24; i++) {
+  const lake = cfg.lake;
+  for (let i = 0; lake && i < 24; i++) {
     const a = rng.range(0, Math.PI * 2);
-    const r = LAKE.r + rng.range(6, 18);
-    const x = LAKE.x + Math.sin(a) * r, z = LAKE.z + Math.cos(a) * r;
+    const r = lake.r + rng.range(6, 18);
+    const x = lake.x + Math.sin(a) * r, z = lake.z + Math.cos(a) * r;
     if (!okSpot(x, z)) continue;
     place(x, z, 0.1);
   }
   // bushes
-  for (let i = 0; i < 380; i++) {
+  for (let i = 0; i < cfg.bushes; i++) {
     const f = rng.chance(0.6) ? rng.pick(forests) : { x: 0, z: 0, r: 460 };
     const a = rng.range(0, Math.PI * 2);
     const r = Math.sqrt(rng.next()) * f.r;
@@ -477,9 +493,9 @@ export function buildVegetation(m, tex, colliders, heightTex, quality) {
     bushList.push({ x, y: heightAt(x, z) + 0.15 * s, z, s, rot: rng.range(0, 6) });
   }
   // rocks
-  for (let i = 0; i < 170; i++) {
+  for (let i = 0; i < cfg.rocks.n; i++) {
     const a = rng.range(0, Math.PI * 2);
-    const r = rng.range(125, 490);
+    const r = rng.range(cfg.rocks.rmin, cfg.rocks.rmax);
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
     if (!okSpot(x, z, 3)) continue;
     const s = rng.chance(0.15) ? rng.range(2.5, 5) : rng.range(0.4, 1.6);
@@ -487,7 +503,7 @@ export function buildVegetation(m, tex, colliders, heightTex, quality) {
     if (s > 1.2) colliders.addCircle(x, z, s * 0.9);
   }
   // rocks along the overlook cliff edge
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; cfg.edgeRocks && i < 40; i++) {
     const a = rng.range(-0.6, 0.6);
     const r = WORLD_R - rng.range(2, 10);
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
@@ -540,7 +556,7 @@ export function buildVegetation(m, tex, colliders, heightTex, quality) {
       this._lodTimer = 0;
       this._lodPos = new THREE.Vector3(1e9, 0, 0);
     },
-    grass: buildGrass(heightTex, quality),
+    grass: buildGrass(heightTex, quality, cfg.grassTips),
     update(t, center) {
       windUniform.value = t;
       this.grass.material.uniforms.time.value = t;

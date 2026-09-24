@@ -8,7 +8,7 @@ import { TOWN } from './layout.js';
 
 const col = (h) => new THREE.Color(h);
 
-const PAL = {
+export const PAL = {
   plaster: ['#f3ead8', '#efd9b0', '#ead1c3', '#f7f3ea', '#e2e5d6', '#ebcfa6', '#dbe2e8'],
   stone: ['#ddd6c8', '#c4bcb0', '#d2c2a4', '#bfb6a8'],
   roof: ['#c05a34', '#a9482b', '#c86a3c', '#b5502e', '#6a7380', '#8a5c40', '#b9583a', '#5d8a7e', '#c46d42'],
@@ -24,8 +24,8 @@ function mul(M, x, y, z, ry = 0, rx = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
 }
 
 // ------------------------------------------------------------------ shared templates
-const G = {};
-function templates() {
+export const G = {};
+export function templates() {
   if (G.ready) return;
   G.ready = true;
   G.post = new THREE.CylinderGeometry(0.06, 0.09, 3.3, 8);
@@ -45,7 +45,7 @@ function templates() {
 
 // ------------------------------------------------------------------ roof
 // Ridge along local X of M. span measured along local Z. Returns ridge height.
-function addRoof(b, M, length, span, pitch, baseY, roofTint, wallKey, wallTint, rng, opts = {}) {
+export function addRoof(b, M, length, span, pitch, baseY, roofTint, wallKey, wallTint, rng, opts = {}) {
   const over = opts.over ?? 0.45;
   const endOver = opts.endOver ?? 0.35;
   const t = 0.2;
@@ -71,7 +71,7 @@ function addRoof(b, M, length, span, pitch, baseY, roofTint, wallKey, wallTint, 
 }
 
 // ------------------------------------------------------------------ house
-function addHouse(b, glows, x, z, yaw, spec, rng) {
+export function addHouse(b, glows, x, z, yaw, spec, rng) {
   const M = mat4(x, 0, z, yaw);
   const { w, d, floors } = spec;
   const fh = spec.fh;
@@ -242,7 +242,7 @@ function localToWorld(M, x, y, z) {
 }
 
 // ------------------------------------------------------------------ props
-function addLamp(b, glows, x, z, yaw = 0) {
+export function addLamp(b, glows, x, z, yaw = 0) {
   const M = mat4(x, 0, z, yaw);
   const iron = 0x1e1f24;
   b.add('metal', G.postBase, mul(M, 0, 0.22, 0), iron);
@@ -257,7 +257,7 @@ function addLamp(b, glows, x, z, yaw = 0) {
   glows.add(p.x, p.y, p.z, 0.45, 0xffe0b0, 0.1);
 }
 
-function addStall(b, glows, x, z, yaw, rng) {
+export function addStall(b, glows, x, z, yaw, rng) {
   const M = mat4(x, 0, z, yaw);
   const wood = 0x8a6848;
   const post = boxGeo(0.1, 2.5, 0.1, 1);
@@ -299,7 +299,7 @@ function addStall(b, glows, x, z, yaw, rng) {
   glows.add(lamp.x, lamp.y, lamp.z, 0.6, 0xffb466, 0.3);
 }
 
-function addBench(b, x, z, yaw) {
+export function addBench(b, x, z, yaw) {
   const M = mat4(x, 0, z, yaw);
   b.add('wood', boxGeo(1.8, 0.08, 0.45, 1), mul(M, 0, 0.46, 0), 0x8a6040);
   b.add('wood', boxGeo(1.8, 0.35, 0.06, 1), mul(M, 0, 0.75, -0.22, 0, -0.15), 0x8a6040);
@@ -489,7 +489,7 @@ function addCathedral(b, colliders, glows, m) {
 }
 
 // ------------------------------------------------------------------ fountain (stone part)
-function addFountain(b, colliders, glows, p) {
+export function addFountain(b, colliders, glows, p) {
   const stoneT = col('#e0d8c8');
   const basin = new THREE.LatheGeometry(
     [

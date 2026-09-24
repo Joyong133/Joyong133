@@ -104,6 +104,19 @@ function drawIcon(g, kind, cx, cy, s, color) {
     }
     g.beginPath(); g.arc(0, 0, s * 0.24, 0, Math.PI * 2); g.stroke();
     g.beginPath(); g.arc(0, 0, s * 0.09, 0, Math.PI * 2); g.fill();
+  } else if (kind === 'map') {
+    g.beginPath();
+    g.moveTo(-s * 0.32, -s * 0.24); g.lineTo(-s * 0.1, -s * 0.32); g.lineTo(s * 0.1, -s * 0.24); g.lineTo(s * 0.32, -s * 0.32);
+    g.lineTo(s * 0.32, s * 0.24); g.lineTo(s * 0.1, s * 0.32); g.lineTo(-s * 0.1, s * 0.24); g.lineTo(-s * 0.32, s * 0.32);
+    g.closePath(); g.stroke();
+    g.beginPath(); g.moveTo(-s * 0.1, -s * 0.32); g.lineTo(-s * 0.1, s * 0.24); g.moveTo(s * 0.1, -s * 0.24); g.lineTo(s * 0.1, s * 0.32); g.stroke();
+  } else if (kind === 'records') {
+    g.beginPath(); g.moveTo(-s * 0.22, -s * 0.3); g.lineTo(s * 0.22, -s * 0.3); g.lineTo(s * 0.18, -s * 0.05);
+    g.quadraticCurveTo(0, s * 0.12, -s * 0.18, -s * 0.05); g.closePath(); g.fill();
+    g.fillRect(-s * 0.04, s * 0.02, s * 0.08, s * 0.16);
+    g.fillRect(-s * 0.16, s * 0.18, s * 0.32, s * 0.08);
+    g.beginPath(); g.arc(-s * 0.24, -s * 0.18, s * 0.09, Math.PI * 0.5, Math.PI * 1.5); g.stroke();
+    g.beginPath(); g.arc(s * 0.24, -s * 0.18, s * 0.09, -Math.PI * 0.5, Math.PI * 0.5); g.stroke();
   } else if (kind === 'logout') {
     g.beginPath(); g.arc(0, s * 0.03, s * 0.27, -Math.PI * 0.32, Math.PI * 1.32); g.stroke();
     g.beginPath(); g.moveTo(0, -s * 0.36); g.lineTo(0, -s * 0.02); g.stroke();
@@ -123,7 +136,7 @@ export class HUD {
   }
 
   render(s) {
-    const key = [s.name, Math.ceil(s.hp), s.maxHp, s.level, Math.floor(s.expFrac * 200), s.potions, s.questText, s.zone, s.col, s.skillReady, s.safe].join('|');
+    const key = [s.name, Math.ceil(s.hp), s.maxHp, s.level, Math.floor(s.expFrac * 200), s.potions, s.questText, s.zone, s.col, s.skillReady, s.safe, s.buff].join('|');
     if (key === this.key) return;
     this.key = key;
     this.main.draw((g, W) => {
@@ -199,6 +212,13 @@ export class HUD {
         g.fillRect(8, 184, 8, 50);
         g.fillStyle = '#fff';
         g.fillText(s.questText, 34, 219);
+      }
+      if (s.buff) {
+        g.font = `700 26px ${FONT}`;
+        g.fillStyle = '#ffd6a0';
+        g.lineWidth = 5;
+        g.strokeText(s.buff, 560, 280);
+        g.fillText(s.buff, 560, 280);
       }
       if (s.skillReady) {
         g.font = `800 28px ${FONT}`;
@@ -416,6 +436,8 @@ const TABS = [
   { id: 'status', label: '상태' },
   { id: 'items', label: '아이템' },
   { id: 'quest', label: '퀘스트' },
+  { id: 'map', label: '지도' },
+  { id: 'records', label: '기록' },
   { id: 'settings', label: '설정' },
   { id: 'logout', label: '로그아웃' },
 ];
@@ -430,9 +452,9 @@ export class Menu {
     this.anim = 0;
     this.buttons = [];
     TABS.forEach((t, i) => {
-      const cp = new CanvasPlane(160, 160, 0.105, { order: 50 });
+      const cp = new CanvasPlane(160, 160, 0.078, { order: 50 });
       cp.mesh.userData = { kind: 'tab', id: t.id };
-      cp.mesh.position.set(-0.46, 0.2 - i * 0.12, 0);
+      cp.mesh.position.set(-0.43, 0.2 - i * 0.075, 0);
       this.group.add(cp.mesh);
       this.buttons.push({ ...t, cp, hover: 0 });
     });
@@ -482,7 +504,7 @@ export class Menu {
   drawPanel() {
     const s = this.game.stats();
     const regions = (this.regions = []);
-    const btn = (g, x, y, w, h, label, id, primary = false, disabled = false) => {
+    const btn = (g, x, y, w, h, label, id, primary = false, disabled = false, size = 30) => {
       const hov = this.hoverRegion === id;
       roundRect(g, x, y, w, h, 12);
       g.fillStyle = disabled ? '#e4e7ec' : primary ? (hov ? C.accentDark : C.accent) : hov ? '#eef1f5' : '#ffffff';
@@ -491,11 +513,17 @@ export class Menu {
       g.strokeStyle = primary ? 'rgba(0,0,0,0)' : C.line;
       g.stroke();
       g.fillStyle = disabled ? C.muted : primary ? '#fff' : C.ink;
-      g.font = `700 30px ${FONT}`;
+      g.font = `700 ${size}px ${FONT}`;
       g.textAlign = 'center';
-      g.fillText(label, x + w / 2, y + h / 2 + 11);
+      g.fillText(label, x + w / 2, y + h / 2 + size * 0.36);
       g.textAlign = 'left';
       if (!disabled) regions.push({ id, x, y, w, h });
+    };
+    const bar = (g, x, y, w, h, f, color) => {
+      g.fillStyle = '#e4e7ec';
+      g.fillRect(x, y, w, h);
+      g.fillStyle = color;
+      g.fillRect(x, y, w * Math.max(0, Math.min(1, f)), h);
     };
     this.panel.draw((g, W, H) => {
       g.fillStyle = C.panel;
@@ -507,6 +535,11 @@ export class Menu {
       g.fillStyle = C.ink;
       g.font = `800 44px ${FONT}`;
       g.fillText(tab.label, 40, 76);
+      g.font = `600 26px ${FONT}`;
+      g.fillStyle = C.muted;
+      g.textAlign = 'right';
+      g.fillText(`${s.floorName} · ${s.zone}`, W - 40, 72);
+      g.textAlign = 'left';
       g.fillStyle = C.line;
       g.fillRect(40, 100, W - 80, 2);
       g.font = `600 30px ${FONT}`;
@@ -519,74 +552,109 @@ export class Menu {
         g.textAlign = 'left';
       };
       if (this.tab === 'status') {
-        row(160, '이름', s.name);
-        row(210, '레벨', `Lv ${s.level}`);
-        row(260, 'HP', `${Math.ceil(s.hp)} / ${s.maxHp}`);
-        row(310, '경험치', `${s.exp} / ${s.expNext}`);
-        g.fillStyle = '#e4e7ec';
-        g.fillRect(40, 330, W - 80, 12);
-        g.fillStyle = C.blue;
-        g.fillRect(40, 330, (W - 80) * s.expFrac, 12);
-        row(400, '공격력', `${s.atk}`);
-        row(450, '장비', s.swordName);
-        row(500, '처치 수', `${s.kills}`);
-        row(550, '소지금', `${s.col} Col`);
+        g.font = `600 28px ${FONT}`;
+        row(150, '이름 / 레벨', `${s.name}  ·  Lv ${s.level}`);
+        row(196, 'HP', `${Math.ceil(s.hp)} / ${s.maxHp}${s.hpBonus ? `  (망토 +${s.hpBonus})` : ''}`);
+        row(242, '경험치', `${s.exp} / ${s.expNext}`);
+        bar(g, 40, 258, W - 80, 10, s.expFrac, C.blue);
+        row(310, '공격력', `${s.atk}${s.buff ? '  (케이크 +20%)' : ''}`);
+        row(356, '장비', s.swordName);
+        row(402, '처치 수', `${s.kills}`);
+        row(448, '소지금', `${s.col} Col`);
+        row(494, '동료', s.petName || '없음');
+        row(540, '공략한 층', s.cleared);
       } else if (this.tab === 'items') {
-        g.fillStyle = C.ink;
-        g.font = `700 34px ${FONT}`;
-        g.fillText(`회복 포션  ×${s.potions}`, 40, 170);
-        g.font = `500 26px ${FONT}`;
+        const it = s.items;
+        let y = 128;
+        g.font = `700 24px ${FONT}`;
         g.fillStyle = C.muted;
-        g.fillText('HP를 120 회복합니다. (VR: X 버튼 / PC: Q)', 40, 212);
-        btn(g, W - 230, 132, 190, 64, '사용', 'usePotion', true, s.potions <= 0);
+        g.fillText('소모품', 40, y + 14);
+        y += 28;
+        for (const c of it.use) {
+          g.fillStyle = C.ink;
+          g.font = `700 30px ${FONT}`;
+          g.fillText(`${c.name}  ×${c.count}`, 40, y + 34);
+          g.font = `500 21px ${FONT}`;
+          g.fillStyle = C.muted;
+          g.fillText(wrapText(g, c.desc, W - 330)[0], 40, y + 62);
+          btn(g, W - 200, y + 6, 160, 56, '사용', `use:${c.id}`, true, c.count <= 0, 26);
+          y += 74;
+        }
         g.fillStyle = C.line;
-        g.fillRect(40, 250, W - 80, 2);
+        g.fillRect(40, y + 4, W - 80, 2);
+        y += 36;
+        const lines = [];
+        if (it.mats.length) lines.push('재료: ' + it.mats.map((m) => `${m.name} ×${m.count}`).join(' · '));
+        if (it.fish.length) lines.push('물고기: ' + it.fish.map((m) => `${m.name} ×${m.count}`).join(' · '));
+        if (it.keys.length) lines.push('중요: ' + it.keys.map((m) => m.name + (m.count > 1 ? ` ×${m.count}` : '')).join(' · '));
+        if (!lines.length) lines.push('재료나 물고기가 없습니다. 몬스터를 쓰러뜨리거나 낚시를 해 보세요.');
+        g.font = `500 23px ${FONT}`;
         g.fillStyle = C.ink;
-        g.font = `700 34px ${FONT}`;
-        g.fillText(s.swordName, 40, 310);
-        g.font = `500 26px ${FONT}`;
-        g.fillStyle = C.muted;
-        const lines = wrapText(g, s.swordDesc, W - 80);
-        lines.forEach((l, i) => g.fillText(l, 40, 352 + i * 36));
+        const wrapped = lines.flatMap((l) => wrapText(g, l, W - 80));
+        wrapped.slice(0, Math.floor((H - 60 - y) / 30)).forEach((l, i) => g.fillText(l, 40, y + i * 30));
       } else if (this.tab === 'quest') {
-        const q = s.quest;
-        if (!q) {
+        const qs = s.quests;
+        if (!qs.length) {
           g.fillStyle = C.muted;
           g.fillText('진행 중인 퀘스트가 없습니다.', 40, 170);
-          g.fillText('광장의 기사 “엘렌”에게 말을 걸어보세요.', 40, 215);
-        } else {
-          g.fillStyle = C.ink;
-          g.font = `800 36px ${FONT}`;
-          g.fillText(q.title, 40, 170);
-          g.font = `500 27px ${FONT}`;
-          g.fillStyle = C.muted;
-          wrapText(g, q.desc, W - 80).forEach((l, i) => g.fillText(l, 40, 218 + i * 38));
-          g.fillStyle = C.ink;
-          g.font = `700 32px ${FONT}`;
-          g.fillText(q.progressText, 40, 420);
-          g.fillStyle = '#e4e7ec';
-          g.fillRect(40, 440, W - 80, 14);
-          g.fillStyle = q.done ? '#2fb44a' : C.accent;
-          g.fillRect(40, 440, (W - 80) * Math.min(1, q.progress / q.need), 14);
-          if (q.done) {
-            g.fillStyle = '#2fb44a';
-            g.fillText('완료! 엘렌에게 보고하세요.', 40, 510);
-          }
+          g.fillText('머리 위에 “!” 표시가 있는 사람에게 말을 걸어보세요.', 40, 215);
         }
+        const per = qs.length > 1 ? (H - 150) / qs.length : H - 150;
+        qs.slice(0, 3).forEach((q, i) => {
+          const y0 = 128 + i * per;
+          g.fillStyle = C.ink;
+          g.font = `800 ${qs.length > 1 ? 30 : 36}px ${FONT}`;
+          g.fillText(q.title, 40, y0 + 34);
+          g.font = `600 22px ${FONT}`;
+          g.fillStyle = C.accentDark;
+          g.textAlign = 'right';
+          g.fillText(`의뢰인: ${q.giver}`, W - 40, y0 + 32);
+          g.textAlign = 'left';
+          g.font = `500 ${qs.length > 1 ? 21 : 26}px ${FONT}`;
+          g.fillStyle = C.muted;
+          const maxL = qs.length > 2 ? 1 : qs.length > 1 ? 2 : 5;
+          wrapText(g, q.desc, W - 80).slice(0, maxL).forEach((l, k) => g.fillText(l, 40, y0 + 66 + k * (qs.length > 1 ? 27 : 36)));
+          const by = y0 + (qs.length > 2 ? 94 : qs.length > 1 ? 124 : 300);
+          g.fillStyle = q.done ? '#2fb44a' : C.ink;
+          g.font = `700 24px ${FONT}`;
+          g.fillText(q.done ? `완료! ${q.giver}에게 보고하세요` : q.progressText, 40, by);
+          bar(g, 40, by + 10, W - 80, 10, q.progress / q.need, q.done ? '#2fb44a' : C.accent);
+        });
+      } else if (this.tab === 'map') {
+        this.drawMap(g, W, H, s.map);
+      } else if (this.tab === 'records') {
+        const r = s.records;
+        g.font = `600 27px ${FONT}`;
+        const rows = [
+          ['몬스터 처치', `${s.kills}마리${r.topKill ? `  (최다: ${r.topKill})` : ''}`],
+          ['공략한 층', s.cleared],
+          ['열어 본 보물상자', `${r.chests || 0}개`],
+          ['낚은 물고기', `${r.fish || 0}마리`],
+          ['최대어', r.bigFish ? `${r.bigFishName} ${r.bigFish.size}cm` : '-'],
+          ['수련장 최고 점수', r.trainBest ? `${r.trainBest}점` : '-'],
+          ['술래잡기 최고 기록', r.tagBest ? `${r.tagBest}초` : '-'],
+          ['하이 & 로우 최고 연승', r.cardStreak ? `${r.cardStreak}연승` : '-'],
+          ['검 강화 최고 단계', r.enhBest ? `+${r.enhBest}` : '-'],
+        ];
+        rows.forEach(([k, v], i) => row(150 + i * 48, k, v));
       } else if (this.tab === 'settings') {
         const set = this.game.settings;
         const opt = (y, label, id, value) => {
           g.fillStyle = C.ink;
-          g.font = `600 30px ${FONT}`;
-          g.fillText(label, 40, y + 42);
-          btn(g, W - 300, y, 260, 62, value, id);
+          g.font = `600 28px ${FONT}`;
+          g.fillText(label, 40, y + 38);
+          btn(g, W - 300, y, 260, 56, value, id, false, false, 27);
         };
-        opt(130, '회전 방식', 'turn', set.snapTurn ? '스냅 30°' : '부드럽게');
-        opt(210, '이동 시 비네트', 'vignette', set.vignette ? '켜기' : '끄기');
-        opt(290, '배경 음악', 'music', set.music ? '켜기' : '끄기');
-        opt(370, '검 각도', 'swordAngle', `${set.swordAngle}°`);
-        opt(450, '검을 쥘 손', 'hand', set.mainHand === 'right' ? '오른손' : '왼손');
-        opt(530, '이동 방향 기준', 'moveRef', set.moveRef === 'head' ? '머리' : '컨트롤러');
+        const opts = [
+          ['회전 방식', 'turn', set.snapTurn ? '스냅 30°' : '부드럽게'],
+          ['이동 시 비네트', 'vignette', set.vignette ? '켜기' : '끄기'],
+          ['배경 음악', 'music', set.music ? '켜기' : '끄기'],
+          ['검 각도', 'swordAngle', `${set.swordAngle}°`],
+          ['검을 쥘 손', 'hand', set.mainHand === 'right' ? '오른손' : '왼손'],
+          ['이동 방향 기준', 'moveRef', set.moveRef === 'head' ? '머리' : '컨트롤러'],
+        ];
+        if (s.petName) opts.push(['펫 동행', 'pet', set.pet !== false ? '함께' : '쉬게 하기']);
+        opts.forEach(([l, id, v], i) => opt(122 + i * 64, l, id, v));
       } else if (this.tab === 'logout') {
         g.fillStyle = C.ink;
         g.font = `600 32px ${FONT}`;
@@ -607,8 +675,122 @@ export class Menu {
       }
       g.font = `500 22px ${FONT}`;
       g.fillStyle = C.muted;
-      g.fillText('B / Y 버튼 (PC: Tab) 으로 닫기', 40, H - 28);
+      g.fillText('B / Y 버튼 (PC: Tab) 으로 닫기', 40, H - 22);
     });
+  }
+
+  drawMap(g, W, H, m) {
+    if (!m) return;
+    const info = m.info;
+    const cx = 320, cy = 356, rad = 224;
+    const c0 = info.center || { x: 0, z: 0 };
+    const k = rad / info.R;
+    // north (-z) is up on the map
+    const P = (x, z) => [cx + (x - c0.x) * k, cy + (z - c0.z) * k];
+    g.save();
+    g.beginPath();
+    g.arc(cx, cy, rad + 6, 0, Math.PI * 2);
+    g.fillStyle = info.rects ? '#2a2e36' : '#8fb86a';
+    g.fill();
+    g.clip();
+    if (!info.rects) {
+      const grd = g.createRadialGradient(cx, cy, rad * 0.6, cx, cy, rad);
+      grd.addColorStop(0, 'rgba(0,0,0,0)');
+      grd.addColorStop(1, 'rgba(90,70,50,0.35)');
+      g.fillStyle = grd;
+      g.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    }
+    for (const r of info.rects || []) {
+      const [x0, y0] = P(r.x0, r.z0), [x1, y1] = P(r.x1, r.z1);
+      g.fillStyle = r.fill;
+      g.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+    }
+    for (const a of info.areas || []) {
+      const [x, y] = P(a.x, a.z);
+      g.beginPath();
+      g.arc(x, y, a.r * k, 0, Math.PI * 2);
+      g.fillStyle = a.fill;
+      g.fill();
+      if (a.stroke) { g.lineWidth = 3; g.strokeStyle = a.stroke; g.stroke(); }
+    }
+    g.strokeStyle = '#c8a878';
+    g.lineWidth = 4;
+    g.lineCap = 'round';
+    for (const road of info.roads || []) {
+      g.beginPath();
+      road.forEach(([x, z], i) => { const [px, py] = P(x, z); if (i) g.lineTo(px, py); else g.moveTo(px, py); });
+      g.stroke();
+    }
+    g.restore();
+    g.lineWidth = 4;
+    g.strokeStyle = '#5a6070';
+    g.beginPath();
+    g.arc(cx, cy, rad + 6, 0, Math.PI * 2);
+    g.stroke();
+    // points of interest
+    const icons = { gate: '#3aa6ff', boss: '#ef4b3f', tower: '#8a7aff', fish: '#2fb4c8', dot: '#f0a020', flower: '#6fd0ff' };
+    g.font = `700 20px ${FONT}`;
+    for (const p of info.pois || []) {
+      const [x, y] = P(p.x, p.z);
+      g.beginPath();
+      g.arc(x, y, 8, 0, Math.PI * 2);
+      g.fillStyle = icons[p.icon] || '#f0a020';
+      g.fill();
+      g.lineWidth = 2;
+      g.strokeStyle = '#fff';
+      g.stroke();
+      g.lineWidth = 4;
+      g.strokeStyle = 'rgba(0,0,0,0.55)';
+      g.strokeText(p.label, x + 12, y + 7);
+      g.fillStyle = '#fff';
+      g.fillText(p.label, x + 12, y + 7);
+    }
+    // quest markers
+    for (const q of m.marks || []) {
+      const [x, y] = P(q.x, q.z);
+      g.font = `900 26px ${FONT}`;
+      g.fillStyle = q.kind === '?' ? '#6fd06f' : '#f0a020';
+      g.strokeStyle = '#fff';
+      g.lineWidth = 3;
+      g.strokeText(q.kind, x - 6, y + 9);
+      g.fillText(q.kind, x - 6, y + 9);
+    }
+    // player arrow
+    const [px, py] = P(m.player.x, m.player.z);
+    g.save();
+    g.translate(px, py);
+    g.rotate(-m.player.yaw);
+    g.beginPath();
+    g.moveTo(0, -16);
+    g.lineTo(10, 12);
+    g.lineTo(0, 6);
+    g.lineTo(-10, 12);
+    g.closePath();
+    g.fillStyle = '#ffdf40';
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = '#2a2a2a';
+    g.stroke();
+    g.restore();
+    // legend
+    const lx = 610;
+    g.font = `800 30px ${FONT}`;
+    g.fillStyle = C.ink;
+    g.fillText(m.name, lx, 160);
+    g.font = `500 22px ${FONT}`;
+    g.fillStyle = C.muted;
+    const leg = [['#ffdf40', '현재 위치'], ['#3aa6ff', '전이문 / 입구'], ['#ef4b3f', '보스'], ['#8a7aff', '미궁 / 계단'], ['#2fb4c8', '낚시터'], ['#f0a020', '! 퀘스트']];
+    leg.forEach(([c, t], i) => {
+      g.beginPath();
+      g.arc(lx + 10, 200 + i * 40, 8, 0, Math.PI * 2);
+      g.fillStyle = c;
+      g.fill();
+      g.fillStyle = C.ink;
+      g.fillText(t, lx + 28, 208 + i * 40);
+    });
+    g.fillStyle = C.muted;
+    g.font = `500 20px ${FONT}`;
+    wrapText(g, '지도의 위쪽이 북쪽입니다.', 250).forEach((l, i) => g.fillText(l, lx, 470 + i * 26));
   }
 
   // pointer hit: returns true if the hit changed hover state
@@ -651,7 +833,7 @@ export class Menu {
     const e = 1 - Math.pow(1 - this.anim, 3);
     this.buttons.forEach((b, i) => {
       const k = Math.min(1, Math.max(0, e * 1.6 - i * 0.12));
-      b.cp.mesh.position.x = -0.46 - (1 - k) * 0.12;
+      b.cp.mesh.position.x = -0.43 - (1 - k) * 0.12;
       b.cp.material.opacity = k;
       b.cp.mesh.scale.setScalar(0.6 + 0.4 * k);
     });
@@ -668,7 +850,7 @@ export class Menu {
 export class Dialog {
   constructor(game) {
     this.game = game;
-    this.cp = new CanvasPlane(900, 460, 0.72, { order: 45 });
+    this.cp = new CanvasPlane(900, 500, 0.72, { order: 45 });
     this.cp.mesh.visible = false;
     this.cp.mesh.userData = { kind: 'dialog' };
     this.open = false;
@@ -704,7 +886,10 @@ export class Dialog {
       g.fillText(this.name, 36, 66);
       g.font = `500 29px ${FONT}`;
       g.fillStyle = '#3a4150';
-      wrapText(g, this.text, W - 72).slice(0, 5).forEach((l, i) => g.fillText(l, 36, 118 + i * 40));
+      const lines = wrapText(g, this.text, W - 72);
+      const lh = lines.length > 5 ? 34 : 40;
+      if (lines.length > 5) g.font = `500 26px ${FONT}`;
+      lines.slice(0, 7).forEach((l, i) => g.fillText(l, 36, 112 + i * lh));
       const n = this.options.length;
       const bw = (W - 72 - (n - 1) * 16) / n;
       this.options.forEach((o, i) => {
@@ -717,7 +902,7 @@ export class Dialog {
         g.lineWidth = 2;
         if (i !== 0) g.stroke();
         g.fillStyle = i === 0 ? '#fff' : C.ink;
-        g.font = `700 28px ${FONT}`;
+        g.font = `700 ${n > 3 ? 24 : 28}px ${FONT}`;
         g.textAlign = 'center';
         g.fillText(`${o.label}`, x + bw / 2, y + 43);
         g.textAlign = 'left';
@@ -746,5 +931,102 @@ export class Dialog {
     this.game.audio.play('select', { vol: 0.6 });
     this.hide();
     o.action?.();
+  }
+}
+
+// ------------------------------------------------------------------ mini-game panel (score / timer / reel gauge)
+export class MiniPanel {
+  constructor() {
+    this.cp = new CanvasPlane(760, 170, 0.46, { order: 32 });
+    this.cp.mesh.visible = false;
+    this.key = '';
+    this.open = false;
+  }
+  show(title, sub = '', frac = null, color = C.accent) {
+    this.open = true;
+    this.cp.mesh.visible = true;
+    const key = `${title}|${sub}|${frac === null ? '' : Math.round(frac * 100)}|${color}`;
+    if (key === this.key) return;
+    this.key = key;
+    this.cp.draw((g, W, H) => {
+      g.fillStyle = 'rgba(22,26,34,0.78)';
+      roundRect(g, 0, 0, W, H, 20);
+      g.fill();
+      g.fillStyle = color;
+      g.fillRect(0, 0, W, 6);
+      g.textAlign = 'center';
+      g.fillStyle = '#fff';
+      g.font = `800 46px ${FONT}`;
+      g.fillText(title, W / 2, 62);
+      g.font = `600 26px ${FONT}`;
+      g.fillStyle = '#c8d0dc';
+      g.fillText(sub, W / 2, 104);
+      if (frac !== null) {
+        g.fillStyle = 'rgba(255,255,255,0.15)';
+        roundRect(g, 40, 124, W - 80, 24, 12);
+        g.fill();
+        g.fillStyle = color;
+        roundRect(g, 40, 124, Math.max(24, (W - 80) * Math.min(1, Math.max(0, frac))), 24, 12);
+        g.fill();
+      }
+      g.textAlign = 'left';
+    });
+  }
+  hide() {
+    this.open = false;
+    this.cp.mesh.visible = false;
+    this.key = '';
+  }
+}
+
+// ------------------------------------------------------------------ boss HP bar
+export class BossBar {
+  constructor() {
+    this.cp = new CanvasPlane(1024, 120, 0.7, { order: 33 });
+    this.cp.mesh.visible = false;
+    this.key = '';
+  }
+  show(m) {
+    this.cp.mesh.visible = true;
+    const f = Math.max(0, m.hp / m.maxHp);
+    const key = `${m.def.name}|${Math.ceil(f * 400)}|${m.phase2}`;
+    if (key === this.key) return;
+    this.key = key;
+    this.cp.draw((g, W) => {
+      g.font = `800 34px ${FONT}`;
+      g.lineWidth = 6;
+      g.strokeStyle = 'rgba(0,0,0,0.6)';
+      const label = `Lv${m.def.level}  ${m.def.name}${m.phase2 ? '  — 광폭화' : ''}`;
+      g.strokeText(label, 40, 40);
+      g.fillStyle = m.phase2 ? '#ff9a8a' : '#fff';
+      g.fillText(label, 40, 40);
+      // four stacked HP gauges, SAO style
+      const bars = m.def.floorBoss ? 4 : 2;
+      const each = 1 / bars;
+      const x0 = 40, y0 = 58, w = W - 80, h = 30;
+      g.fillStyle = 'rgba(20,24,30,0.78)';
+      roundRect(g, x0 - 4, y0 - 4, w + 8, h + 8, 8);
+      g.fill();
+      const cur = Math.min(bars - 1, Math.floor(f / each));
+      const inBar = (f - cur * each) / each;
+      if (cur > 0) {
+        g.fillStyle = '#7a3a3a';
+        g.fillRect(x0, y0, w, h);
+      }
+      g.fillStyle = f > 0.5 ? '#e8534a' : f > 0.25 ? '#f07a30' : '#ff3030';
+      g.fillRect(x0, y0, w * (f <= 0 ? 0 : inBar), h);
+      g.fillStyle = 'rgba(255,255,255,0.22)';
+      g.fillRect(x0, y0, w * inBar, h * 0.4);
+      for (let i = 0; i < bars; i++) {
+        g.beginPath();
+        g.arc(x0 + w - 16 - i * 30, y0 + h + 22, 10, 0, Math.PI * 2);
+        g.fillStyle = i < cur ? '#e8534a' : 'rgba(255,255,255,0.25)';
+        g.fill();
+      }
+    });
+  }
+  hide() {
+    this.cp.mesh.visible = false;
+    this.key = '';
   }
 }
