@@ -46,7 +46,8 @@ export function installAtmosphericFog(sunDir, sunTint) {
     float fogFactor = smoothstep( fogNear, fogFar, fgDist );
   #endif
   float fgSun = pow( max( dot( fgDirN, ${sd} ), 0.0 ), 6.0 );
-  vec3 fgCol = mix( fogColor, ${st}, fgSun * 0.4 );
+  // no sun glow in dark fog (indoors / labyrinth)
+  vec3 fgCol = mix( fogColor, ${st}, fgSun * 0.4 * smoothstep( 0.12, 0.45, dot( fogColor, vec3( 0.3333 ) ) ) );
   gl_FragColor.rgb = mix( gl_FragColor.rgb, fgCol, fogFactor );
 #endif
 `;

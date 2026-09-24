@@ -49,9 +49,10 @@ export async function buildWorld(renderer, scene, quality, progress) {
   sc.near = 20; sc.far = 480;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.06;
-  root.add(sun, sun.target);
+  // lights live on the scene (not the floor-1 root) so every map keeps them
+  scene.add(sun, sun.target);
   const hemi = new THREE.HemisphereLight(0x9fc2ff, 0x5a4a38, 0.35);
-  root.add(hemi);
+  scene.add(hemi);
 
   const colliders = new Colliders();
 

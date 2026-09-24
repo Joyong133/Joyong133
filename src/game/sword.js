@@ -21,6 +21,15 @@ export const SWORDS = {
     atk: 1.5,
     skill: 0x6fe8ff,
   },
+  terra: {
+    name: '대지의 검 테라',
+    desc: '메사의 심장석과 타우러스의 뿔로 벼린 황금빛 장검. 묵직하지만 휘두를 때마다 대지의 힘이 실린다. (공격력 +110%)',
+    blade: 0x8a7a5a,
+    edge: 0xffc860,
+    guard: 0x5a3a1a,
+    atk: 2.1,
+    skill: 0xffb040,
+  },
 };
 
 function bladeGeometry(len = 0.95, w = 0.043, t = 0.0065, tipLen = 0.2) {

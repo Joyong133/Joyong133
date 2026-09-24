@@ -291,6 +291,90 @@ export class GameAudio {
       }
     });
     B.death = chime([659.3, 523.3, 440, 329.6], 0.22, 1.8, 2.4, 0.2);
+    B.fanfare = chime([523.3, 659.3, 784, 1046.5, 784, 1046.5, 1318.5, 1568, 2093], 0.12, 1.6, 2.8, 0.45);
+    B.chest = chime([784, 987.8, 1174.7, 1568], 0.06, 5, 1.1, 0.3);
+    B.giggle = chime([1568, 1760, 1568, 1975.5, 1760], 0.07, 18, 0.6, 0.15);
+    B.moo = this._buf(1.3, (d, sr, n) => {
+      const r = rnd(71);
+      const f = new SVF();
+      let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const u = t / 1.3;
+        const env = Math.pow(Math.sin(Math.PI * u), 0.7);
+        ph += (TAU * (110 + 35 * Math.sin(u * Math.PI) - 25 * u)) / sr;
+        const saw = ((ph / TAU) % 1) * 2 - 1;
+        d[i] = Math.tanh(f.run(saw + r() * 0.25, 500 + 700 * Math.sin(u * Math.PI), 0.25, sr).low * 2) * env * 0.8;
+      }
+    });
+    B.buzz = this._buf(0.7, (d, sr, n) => {
+      const r = rnd(73);
+      const f = new SVF();
+      let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const env = Math.sin(Math.PI * t / 0.7);
+        ph += (TAU * (190 + 30 * Math.sin(t * 40))) / sr;
+        const saw = ((ph / TAU) % 1) * 2 - 1;
+        d[i] = f.run(saw + r() * 0.3, 2400, 0.3, sr).band * env * 1.1;
+      }
+    });
+    B.slam = this._buf(1.2, (d, sr, n) => {
+      const r = rnd(79);
+      const f = new SVF();
+      let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        ph += (TAU * (38 + 90 * Math.exp(-t * 9))) / sr;
+        let s = Math.sin(ph) * Math.exp(-t * 3.5) * 1.1;
+        s += f.run(r(), 700, 0.5, sr).low * Math.exp(-t * 4) * 1.6;
+        d[i] = Math.tanh(s * 1.4);
+      }
+    });
+    B.anvil = this._buf(0.8, (d, sr, n) => {
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        let s = 0;
+        for (const [hz, a, k] of [[1320, 0.3, 7], [2210, 0.22, 9], [3380, 0.16, 12], [4870, 0.1, 16], [640, 0.2, 10]]) s += Math.sin(TAU * hz * t) * a * Math.exp(-t * k);
+        d[i] = s * Math.min(1, t * 3000);
+      }
+    });
+    B.splash = this._buf(0.6, (d, sr, n) => {
+      const r = rnd(83);
+      const f = new SVF();
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        d[i] = f.run(r(), 1400 + 2500 * Math.exp(-t * 8), 0.6, sr).band * Math.exp(-t * 7) * 1.6;
+      }
+    });
+    B.reel = this._buf(0.12, (d, sr, n) => {
+      const r = rnd(89);
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const tick = (t * 90) % 1 < 0.08 ? 1 : 0;
+        d[i] = r() * tick * 0.5 * (1 - t / 0.12);
+      }
+    });
+    B.bubble = this._buf(0.5, (d, sr, n) => {
+      let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const k = Math.floor(t / 0.08);
+        const tt = t - k * 0.08;
+        ph += (TAU * (500 + k * 120 + tt * 4000)) / sr;
+        d[i] = Math.sin(ph) * Math.exp(-tt * 40) * 0.35;
+      }
+    });
+    B.gate = this._buf(3.0, (d, sr, n) => {
+      const r = rnd(97);
+      const f = new SVF();
+      for (let i = 0; i < n; i++) {
+        const t = i / sr;
+        const u = t / 3;
+        const clank = Math.max(0, Math.sin(t * 14)) ** 12;
+        d[i] = (f.run(r(), 300, 0.4, sr).low * 1.4 + r() * clank * 0.15) * Math.sin(Math.PI * u);
+      }
+    });
     B.bird = [0, 1, 2].map((k) =>
       this._buf(0.5, (d, sr, n) => {
         const r = rnd(50 + k);
@@ -396,6 +480,14 @@ export class GameAudio {
     src.start();
     this._birdTimer = setInterval(() => {
       if (!this.ctx || this.ctx.state !== 'running') return;
+      if (this.zone === 'dungeon') {
+        // water drips in the labyrinth
+        if (Math.random() < 0.5 && this.listenerPos) {
+          const a = Math.random() * TAU;
+          this.play('click', { vol: 0.25, rate: 0.35 + Math.random() * 0.2, pos: this.listenerPos.clone().add(new THREE.Vector3(Math.sin(a) * 8, 3, Math.cos(a) * 8)) });
+        }
+        return;
+      }
       if (Math.random() < (this.zone === 'field' ? 0.55 : 0.3)) {
         const a = Math.random() * TAU;
         const pos = this.listenerPos ? this.listenerPos.clone().add(new THREE.Vector3(Math.sin(a) * 15, 6, Math.cos(a) * 15)) : null;
@@ -433,15 +525,18 @@ export class GameAudio {
     if (p.positionX) { p.positionX.value = pos.x; p.positionY.value = pos.y; p.positionZ.value = pos.z; }
     else p.setPosition(pos.x, pos.y, pos.z);
     const g = ctx.createGain();
-    g.gain.value = kind === 'water' ? 0.35 : 0.3;
+    const vol = kind === 'water' ? 0.35 : 0.3;
+    g.gain.value = vol;
     src.connect(g).connect(p).connect(this.amb);
     src.start();
+    const handle = { g, vol, set: (on) => g.gain.setTargetAtTime(on ? vol : 0, ctx.currentTime, 0.3) };
+    return handle;
   }
 
   setZone(zone) {
     if (zone === this.zone) return;
     this.zone = zone;
-    if (this.windGain) this.windGain.gain.setTargetAtTime(zone === 'field' ? 0.3 : 0.14, this.ctx.currentTime, 1.5);
+    if (this.windGain) this.windGain.gain.setTargetAtTime(zone === 'field' ? 0.3 : zone === 'dungeon' ? 0.07 : 0.14, this.ctx.currentTime, 1.5);
   }
 
   setMusic(on) {
@@ -459,6 +554,47 @@ export class GameAudio {
   }
 
   _theme() {
+    if (this.curTheme === 'dungeon') {
+      return {
+        bpm: 70,
+        // Em - C - Am - B (dark, sparse)
+        chords: [[52, 55, 59], [48, 52, 55], [45, 48, 52], [47, 51, 54]],
+        bass: [28, 24, 33, 35],
+        scale: [52, 54, 55, 57, 59, 60, 63, 64, 66],
+        drums: false,
+        sparse: true,
+      };
+    }
+    if (this.curTheme === 'town2') {
+      return {
+        bpm: 96,
+        // F - Dm - Bb - C (bright, pastoral)
+        chords: [[65, 69, 72, 77], [62, 65, 69, 74], [58, 62, 65, 72], [60, 64, 67, 74]],
+        bass: [41, 38, 34, 36],
+        scale: [65, 67, 69, 70, 72, 74, 76, 77, 79, 81],
+        drums: false,
+      };
+    }
+    if (this.curTheme === 'field2') {
+      return {
+        bpm: 112,
+        // G - Em - C - D
+        chords: [[67, 71, 74], [64, 67, 71], [60, 64, 67], [62, 66, 69]],
+        bass: [43, 40, 36, 38],
+        scale: [67, 69, 71, 72, 74, 76, 78, 79, 81, 83],
+        drums: true,
+      };
+    }
+    if (this.curTheme === 'game') {
+      return {
+        bpm: 138,
+        // C - G - Am - F (upbeat mini-game)
+        chords: [[60, 64, 67], [55, 59, 62], [57, 60, 64], [53, 57, 60]],
+        bass: [36, 31, 33, 29],
+        scale: [60, 62, 64, 67, 69, 72, 74, 76, 79],
+        drums: true,
+      };
+    }
     if (this.curTheme === 'field') {
       return {
         bpm: 104,
@@ -512,10 +648,10 @@ export class GameAudio {
       if (beat === 4) this._bass(th.bass[bar] + (th.drums ? 0 : 7), t, eighth * 3);
       // harp arpeggio
       const arp = chord[(beat * (th.drums ? 1 : 2)) % chord.length] + (beat >= 4 ? 12 : 0);
-      this._pluck(arp, t, th.drums ? 0.05 : 0.06);
+      if (!th.sparse || beat % 2 === 0) this._pluck(arp, t, th.drums ? 0.05 : th.sparse ? 0.045 : 0.06);
       // melody: random walk on the scale with phrasing
       const phrasePos = s % 16;
-      if (phrasePos < 12 && Math.random() < (beat % 2 === 0 ? 0.7 : 0.25)) {
+      if (phrasePos < 12 && Math.random() < (beat % 2 === 0 ? (th.sparse ? 0.35 : 0.7) : th.sparse ? 0.08 : 0.25)) {
         this.melodyIdx = Math.max(0, Math.min(th.scale.length - 1, this.melodyIdx + Math.round((Math.random() - 0.5) * 3.2)));
         if (beat === 0) {
           // land on a chord tone at bar starts
@@ -537,6 +673,17 @@ export class GameAudio {
       this.nextTime += eighth;
       this.step++;
     }
+  }
+
+  // short melody played over the music (the bard's song, fanfares)
+  jingle(notes, step = 0.2, vol = 0.09) {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime + 0.05;
+    notes.forEach((n, i) => {
+      if (n === null) return;
+      this._lead(n, t0 + i * step, step * 1.6, vol);
+      if (i % 2 === 0) this._pluck(n - 12, t0 + i * step, vol * 0.8);
+    });
   }
 
   setTheme(theme) {

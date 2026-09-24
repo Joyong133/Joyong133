@@ -1,13 +1,17 @@
-// 2D collision world (XZ plane): circles, oriented boxes and the city wall ring.
+// 2D collision world (XZ plane): circles, oriented boxes and an optional
+// ring wall with gate openings (a city wall / crater rim).
 // Stored in a spatial hash so resolving the player is O(nearby).
 import { TOWN } from './layout.js';
 
+const TOWN_RING = { r: TOWN.wallR, thick: TOWN.wallThick, gates: TOWN.gates, gateHalf: 3.2 };
+
 export class Colliders {
-  constructor(cell = 8) {
+  constructor(cell = 8, ring = TOWN_RING) {
     this.cell = cell;
     this.grid = new Map();
     this.count = 0;
-    this.gateHalf = 3.2; // half width of the wall gate openings (m)
+    this.ring = ring;
+    this.gateHalf = ring ? ring.gateHalf : 3.2; // half width of the wall gate openings (m)
   }
 
   _k(ix, iz) {
@@ -49,7 +53,7 @@ export class Colliders {
       const arr = this.grid.get(this._k(Math.floor(p.x / this.cell), Math.floor(p.z / this.cell)));
       if (arr) {
         for (let i = 0; i < arr.length; i++) {
-          if (this._resolveOne(arr[i], p, radius)) hit = true;
+          if (!arr[i].off && this._resolveOne(arr[i], p, radius)) hit = true;
         }
       }
       if (this._resolveWall(p, radius)) hit = true;
@@ -94,7 +98,7 @@ export class Colliders {
 
   isGateAngle(x, z) {
     const r = Math.hypot(x, z) || 1;
-    for (const g of TOWN.gates) {
+    for (const g of this.ring.gates) {
       const gx = Math.sin(g), gz = Math.cos(g);
       // lateral distance from the gate axis
       const lat = Math.abs(x * gz - z * gx);
@@ -105,9 +109,10 @@ export class Colliders {
   }
 
   _resolveWall(p, radius) {
+    if (!this.ring) return false;
     const r = Math.hypot(p.x, p.z);
-    const inner = TOWN.wallR - TOWN.wallThick / 2 - radius;
-    const outer = TOWN.wallR + TOWN.wallThick / 2 + radius;
+    const inner = this.ring.r - this.ring.thick / 2 - radius;
+    const outer = this.ring.r + this.ring.thick / 2 + radius;
     if (r <= inner || r >= outer) return false;
     if (this.isGateAngle(p.x, p.z)) {
       // inside the gate passage: keep away from the jambs

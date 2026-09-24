@@ -2,7 +2,7 @@
 // one at the field outpost. Swirling portal shader + rising motes + rune circle.
 import * as THREE from 'three';
 import { GeoBuilder, mat4, boxGeo, archRingGeo, scaleUV } from '../core/geo.js';
-import { heightAt, OUTPOST } from './layout.js';
+import { heightF1 as heightAt, OUTPOST } from './layout.js';
 
 function portalMaterial() {
   return new THREE.ShaderMaterial({
@@ -98,7 +98,7 @@ function motes(count, radius, height) {
   return pts;
 }
 
-function makeGate(b, group, mats, glows, colliders, pos, yaw, scale, tex) {
+export function makeGate(b, group, mats, glows, colliders, pos, yaw, scale) {
   const M = mat4(pos.x, pos.y, pos.z, yaw, 0, 0, scale, scale, scale);
   const stone = new THREE.Color('#e4dccb');
   const trim = new THREE.Color('#b9ad97');
@@ -153,14 +153,23 @@ function makeGate(b, group, mats, glows, colliders, pos, yaw, scale, tex) {
   return { pos: pos.clone(), yaw, scale, rune, portal };
 }
 
+export function gateMaterials(tex) {
+  return { portal: portalMaterial(), rune: runeMaterial(tex.rune), motes: [] };
+}
+
+export function updateGateMaterials(mats, t) {
+  mats.portal.uniforms.time.value = t;
+  for (const mm of mats.motes) mm.uniforms.time.value = t;
+}
+
 export function buildGates(m, tex, colliders, glows) {
   const group = new THREE.Group();
   group.name = 'gates';
   const b = new GeoBuilder();
-  const mats = { portal: portalMaterial(), rune: runeMaterial(tex.rune), motes: [] };
-  const main = makeGate(b, group, mats, glows, colliders, new THREE.Vector3(0, 0, 0), 0, 1, tex);
+  const mats = gateMaterials(tex);
+  const main = makeGate(b, group, mats, glows, colliders, new THREE.Vector3(0, 0, 0), 0, 1);
   const oy = heightAt(OUTPOST.x, OUTPOST.z);
-  const outpost = makeGate(b, group, mats, glows, colliders, new THREE.Vector3(OUTPOST.x + 8, oy, OUTPOST.z), -Math.PI / 2, 0.7, tex);
+  const outpost = makeGate(b, group, mats, glows, colliders, new THREE.Vector3(OUTPOST.x + 8, oy, OUTPOST.z), -Math.PI / 2, 0.7);
 
   // outpost ruins: broken stone ring
   const stone = new THREE.Color('#c9c1b0');
@@ -195,8 +204,7 @@ export function buildGates(m, tex, colliders, glows) {
     outpost,
     fire: fp,
     update(dt, t) {
-      mats.portal.uniforms.time.value = t;
-      for (const mm of mats.motes) mm.uniforms.time.value = t;
+      updateGateMaterials(mats, t);
       main.rune.rotation.z = t * 0.05;
       outpost.rune.rotation.z = -t * 0.05;
     },

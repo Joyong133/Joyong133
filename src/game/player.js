@@ -1,7 +1,7 @@
 // Player rig: smooth locomotion + snap/smooth turning in VR, mouse-look FPS
 // controls on desktop, collision against the town, and RPG stats.
 import * as THREE from 'three';
-import { heightAt, TOWN } from '../world/layout.js';
+import { heightAt } from '../world/layout.js';
 import { BTN } from './input.js';
 
 const _v = new THREE.Vector3();
@@ -18,9 +18,9 @@ export class Player {
     this.level = saved?.level ?? 1;
     this.exp = saved?.exp ?? 0;
     this.col = saved?.col ?? 100;
-    this.potions = saved?.potions ?? 3;
     this.kills = saved?.kills ?? 0;
     this.swordId = saved?.swordId ?? 'starter';
+    this.swordPlus = saved?.swordPlus ?? 0;
     this.hp = this.maxHp;
     this.dead = false;
     this.inTown = true;
@@ -36,8 +36,24 @@ export class Player {
     this.sprint = false;
   }
 
+  // potions live in the inventory
+  get potions() {
+    return this.game.inv.count('potion');
+  }
+  set potions(v) {
+    const d = v - this.potions;
+    if (d > 0) this.game.inv.add('potion', d);
+    else if (d < 0) this.game.inv.remove('potion', -d);
+  }
+  get hpBonus() {
+    return this.game.inv?.has('lordCoat') ? 60 : 0;
+  }
   get maxHp() {
-    return 220 + (this.level - 1) * 35;
+    return 220 + (this.level - 1) * 35 + this.hpBonus;
+  }
+  // desktop jump lets you hop over a boss shockwave
+  get airborne() {
+    return this.rig.position.y - heightAt(this.head.x, this.head.z) > 0.35;
   }
   get atk() {
     return 12 + (this.level - 1) * 3;
@@ -78,12 +94,12 @@ export class Player {
   }
 
   _collide(prevHead) {
-    const colliders = this.game.world.colliders;
+    const map = this.game.map;
     const p = { x: this.head.x, z: this.head.z };
-    colliders.resolve(p, 0.28);
+    map.colliders.resolve(p, 0.28);
     // world edge (don't walk off the floating castle… unless you really want to)
     const r = Math.hypot(p.x, p.z);
-    const maxR = 497.2;
+    const maxR = map.maxR;
     if (r > maxR) { p.x *= maxR / r; p.z *= maxR / r; }
     const dx = p.x - this.head.x, dz = p.z - this.head.z;
     if (dx || dz) {
@@ -200,10 +216,10 @@ export class Player {
   _afterMove() {
     this._headWorld();
     this.feet.set(this.head.x, heightAt(this.head.x, this.head.z), this.head.z);
-    this.inTown = Math.hypot(this.head.x, this.head.z) < TOWN.safeR;
+    this.inTown = this.game.map.isSafe(this.head.x, this.head.z);
   }
 
   toJSON() {
-    return { level: this.level, exp: this.exp, col: this.col, potions: this.potions, kills: this.kills, swordId: this.swordId };
+    return { level: this.level, exp: this.exp, col: this.col, kills: this.kills, swordId: this.swordId, swordPlus: this.swordPlus };
   }
 }

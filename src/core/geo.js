@@ -137,6 +137,7 @@ export class GeoBuilder {
     if (Array.isArray(color)) _c.setRGB(color[0], color[1], color[2]);
     else _c.set(color);
     const pos = g.attributes.position.array;
+    const src = opts.keepColors && geo.attributes.color ? geo.attributes.color.array : null;
     const ao = opts.ao !== false;
     const aoMin = opts.aoMin ?? 0.55;
     const aoH = opts.aoH ?? 1.6;
@@ -144,9 +145,9 @@ export class GeoBuilder {
     for (let i = 0; i < n; i++) {
       let k = 1;
       if (ao) k = aoMin + (1 - aoMin) * smoothstep(0, aoH, pos[i * 3 + 1] - ground);
-      col[i * 3] = _c.r * k;
-      col[i * 3 + 1] = _c.g * k;
-      col[i * 3 + 2] = _c.b * k;
+      col[i * 3] = _c.r * k * (src ? src[i * 3] : 1);
+      col[i * 3 + 1] = _c.g * k * (src ? src[i * 3 + 1] : 1);
+      col[i * 3 + 2] = _c.b * k * (src ? src[i * 3 + 2] : 1);
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     let list = this.parts.get(key);

@@ -27,6 +27,61 @@ export class Effects {
     this.pillars = [];
     this.pillarGeo = new THREE.CylinderGeometry(1, 1, 1, 32, 1, true);
     this.pillarGeo.translate(0, 0.5, 0);
+    this.discGeo = new THREE.CircleGeometry(1, 48);
+    this.discGeo.rotateX(-Math.PI / 2);
+    this.decals = [];
+  }
+
+  // AoE warning on the ground: a ring that fills up until the hit lands
+  telegraph(pos, radius, duration, color = 0xff3a2a) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { color: { value: new THREE.Color(color) }, k: { value: 0 }, fade: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: `uniform vec3 color; uniform float k, fade; varying vec2 vUv;
+        void main(){ float r = length(vUv - 0.5) * 2.0;
+          float ring = smoothstep(0.9, 0.97, r) * (1.0 - smoothstep(0.97, 1.0, r));
+          float fill = step(r, k) * (0.25 + 0.35 * smoothstep(k - 0.15, k, r));
+          gl_FragColor = vec4(color * (ring * 1.4 + fill) * fade, 1.0); }`,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -6,
+    });
+    const m = new THREE.Mesh(this.discGeo, mat);
+    m.position.copy(pos).add(new THREE.Vector3(0, 0.06, 0));
+    m.scale.setScalar(radius);
+    m.renderOrder = 9;
+    m.frustumCulled = false;
+    this.scene.add(m);
+    this.decals.push({ m, t: 0, life: duration, kind: 'tele' });
+  }
+
+  // expanding shock ring + debris (boss slams)
+  shockwave(pos, radius, color = 0xffc080) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { color: { value: new THREE.Color(color) }, k: { value: 0 }, fade: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+      fragmentShader: `uniform vec3 color; uniform float k, fade; varying vec2 vUv;
+        void main(){ float r = length(vUv - 0.5) * 2.0;
+          float w = 0.12 + 0.1 * k;
+          float ring = smoothstep(k - w, k, r) * (1.0 - smoothstep(k, k + 0.03, r));
+          gl_FragColor = vec4(color * ring * 2.0 * fade, 1.0); }`,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const m = new THREE.Mesh(this.discGeo, mat);
+    m.position.copy(pos).add(new THREE.Vector3(0, 0.1, 0));
+    m.scale.setScalar(radius * 1.15);
+    m.renderOrder = 9;
+    m.frustumCulled = false;
+    this.scene.add(m);
+    this.decals.push({ m, t: 0, life: 0.55, kind: 'shock' });
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      this.sparks(pos.clone().add(new THREE.Vector3(Math.sin(a) * radius * 0.5, 0.2, Math.cos(a) * radius * 0.5)), new THREE.Vector3(Math.sin(a), 0.8, Math.cos(a)), 0xc8b090, 3, 5);
+    }
   }
 
   _alloc() {
@@ -155,6 +210,24 @@ export class Effects {
       this.mesh.instanceColor.needsUpdate = true;
     }
     this._wasAny = any;
+    for (let i = this.decals.length - 1; i >= 0; i--) {
+      const d = this.decals[i];
+      d.t += dt;
+      const k = Math.min(1, d.t / d.life);
+      const u = d.m.material.uniforms;
+      if (d.kind === 'tele') {
+        u.k.value = k;
+        u.fade.value = 0.7 + 0.3 * Math.sin(d.t * 18);
+      } else {
+        u.k.value = 0.15 + 0.85 * (1 - Math.pow(1 - k, 2));
+        u.fade.value = 1 - k;
+      }
+      if (d.t >= d.life) {
+        this.scene.remove(d.m);
+        d.m.material.dispose();
+        this.decals.splice(i, 1);
+      }
+    }
     for (let i = this.pillars.length - 1; i >= 0; i--) {
       const pl = this.pillars[i];
       pl.t += dt;

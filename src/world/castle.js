@@ -4,19 +4,23 @@
 import * as THREE from 'three';
 import { GeoBuilder, mat4, boxGeo, scaleUV, spireGeo } from '../core/geo.js';
 import { fbm, ridged, RNG, smoothstep } from '../core/noise.js';
-import { CEILING_Y, TOWER, WORLD_R, heightAt } from './layout.js';
+import { CEILING_Y, TOWER, WORLD_R, heightF1 } from './layout.js';
 
 const CEIL_R = 540;
 
-function buildCeiling(m) {
+// Floor-1 defaults; floor 2 passes its own tower spot, terrain and seeds.
+const F1 = { height: heightF1, tower: TOWER, seeds: [501, 503], rng: 99, overlook: true, crystal: 'crystal', crystalGlow: 0x3a88ff };
+
+function buildCeiling(m, cfg) {
+  const [S1, S2] = cfg.seeds;
   const radii = [];
   for (let r = 0; r <= CEIL_R; r += r < 300 ? 22 : 14) radii.push(r);
   if (radii[radii.length - 1] !== CEIL_R) radii.push(CEIL_R);
   const SEG = 128;
   const verts = [], uvs = [], cols = [], idx = [];
   const disp = (x, z, r) => {
-    const n = fbm(x * 0.004, z * 0.004, 5, 501);
-    const rg = ridged(x * 0.012, z * 0.012, 4, 503);
+    const n = fbm(x * 0.004, z * 0.004, 5, S1);
+    const rg = ridged(x * 0.012, z * 0.012, 4, S2);
     const edge = smoothstep(CEIL_R - 80, CEIL_R, r);
     return 10 + n * 38 + rg * 14 - edge * 30;
   };
@@ -85,13 +89,15 @@ function buildCeiling(m) {
   return mesh;
 }
 
-export function buildCastle(m, tex, colliders, glows) {
+export function buildCastle(m, tex, colliders, glows, cfg = F1) {
+  const heightAt = cfg.height;
+  const [S1, S2] = cfg.seeds;
   const group = new THREE.Group();
   group.name = 'castle';
-  group.add(buildCeiling(m));
+  group.add(buildCeiling(m, cfg));
 
   const b = new GeoBuilder();
-  const rng = new RNG(99);
+  const rng = new RNG(cfg.rng);
   const stone = new THREE.Color('#a9a6a0');
   const darkStone = new THREE.Color('#8b8a90');
 
@@ -105,7 +111,7 @@ export function buildCastle(m, tex, colliders, glows) {
     const a = rng.range(0, Math.PI * 2);
     const r = Math.sqrt(rng.next()) * (CEIL_R - 60);
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
-    const base = CEILING_Y - (10 + fbm(x * 0.004, z * 0.004, 5, 501) * 38 + ridged(x * 0.012, z * 0.012, 4, 503) * 14) + 6;
+    const base = CEILING_Y - (10 + fbm(x * 0.004, z * 0.004, 5, S1) * 38 + ridged(x * 0.012, z * 0.012, 4, S2) * 14) + 6;
     const len = rng.range(12, 42);
     const w = rng.range(4, 10);
     b.add('rock', stal, mat4(x, base, z, rng.range(0, 6), 0, 0, w, len, w), stone.clone().multiplyScalar(0.5), { ao: false });
@@ -113,9 +119,9 @@ export function buildCastle(m, tex, colliders, glows) {
       const cl = rng.int(2, 4);
       for (let k = 0; k < cl; k++) {
         const s = rng.range(1.2, 3);
-        b.add('crystal', crystal, mat4(x + rng.range(-3, 3), base - len * rng.range(0.4, 0.8), z + rng.range(-3, 3), rng.range(0, 3), rng.range(-0.4, 0.4), 0, s * 0.6, s * 2, s * 0.6), 0xffffff, { ao: false });
+        b.add(cfg.crystal, crystal, mat4(x + rng.range(-3, 3), base - len * rng.range(0.4, 0.8), z + rng.range(-3, 3), rng.range(0, 3), rng.range(-0.4, 0.4), 0, s * 0.6, s * 2, s * 0.6), 0xffffff, { ao: false });
       }
-      glows.add(x, base - len * 0.6, z, 9, 0x3a88ff, 0.15, 900);
+      glows.add(x, base - len * 0.6, z, 9, cfg.crystalGlow, 0.15, 900);
     }
   }
 
@@ -144,7 +150,7 @@ export function buildCastle(m, tex, colliders, glows) {
   }
 
   // --- labyrinth tower
-  const T = TOWER;
+  const T = cfg.tower;
   const ground = heightAt(T.x, T.z);
   const tiers = 9;
   const tierH = (CEILING_Y - ground) / tiers;
@@ -192,7 +198,7 @@ export function buildCastle(m, tex, colliders, glows) {
   colliders.addCircle(T.x, T.z, T.r + 1.5);
 
   // world's-end overlook: stone railing along the cliff edge
-  {
+  if (cfg.overlook) {
     const railR = 498;
     const a0 = -0.07, a1 = 0.15;
     const steps = Math.ceil(((a1 - a0) * railR) / 2.4);

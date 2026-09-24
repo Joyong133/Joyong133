@@ -3,14 +3,14 @@
 import * as THREE from 'three';
 import { LAKE, TOWN, SUN_DIR } from './layout.js';
 
-function waterMaterial(envMap, { deep, shallow, scale = 1, strength = 1 }) {
+export function waterMaterial(envMap, { deep, shallow, scale = 1, strength = 1, sun = SUN_DIR }) {
   return new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
       {
         time: { value: 0 },
         env: { value: null },
-        sunDir: { value: SUN_DIR.clone() },
+        sunDir: { value: sun.clone() },
         deep: { value: new THREE.Color(deep) },
         shallow: { value: new THREE.Color(shallow) },
         scale: { value: scale },
@@ -69,7 +69,7 @@ function waterMaterial(envMap, { deep, shallow, scale = 1, strength = 1 }) {
   });
 }
 
-function fallMaterial() {
+export function fallMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: { time: { value: 0 } },
     vertexShader: /* glsl */ `

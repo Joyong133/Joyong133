@@ -1,9 +1,10 @@
-// Townsfolk: instanced cloaked villagers strolling the ring streets, plus the
-// interactive NPCs (quest knight + potion merchant) with floating markers.
+// Townsfolk: instanced cloaked villagers strolling ring streets, plus the
+// interactive NPCs (quest givers, merchants, mini-game hosts) with floating
+// markers and name tags. One instance per town; the layout comes from config.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG } from '../core/noise.js';
-import { FONT } from './ui.js';
+import { FONT, roundRect } from './ui.js';
 
 function colored(geo, color, shade = true) {
   const g = geo.index ? geo.toNonIndexed() : geo;
@@ -77,7 +78,7 @@ function skinGeometry() {
   ]);
 }
 
-function markerSprite(kind) {
+export function markerSprite(kind) {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const tex = new THREE.CanvasTexture(c);
@@ -91,39 +92,68 @@ function markerSprite(kind) {
     if (!k) { tex.needsUpdate = true; return; }
     g.beginPath();
     g.arc(64, 64, 50, 0, Math.PI * 2);
-    g.fillStyle = k === 'coin' ? '#f7c948' : k === '?' ? '#6fd06f' : '#f0a020';
+    const colors = { coin: '#f7c948', '?': '#6fd06f', '!': '#f0a020', game: '#3aa6ff', fish: '#2fb4c8', anvil: '#9a8a7a', pet: '#ff8ab0', music: '#b07aff', info: '#6a7a90' };
+    g.fillStyle = colors[k] || '#f0a020';
     g.fill();
     g.lineWidth = 6;
     g.strokeStyle = '#fff';
     g.stroke();
     g.fillStyle = '#fff';
-    g.font = `900 72px ${FONT}`;
+    const glyph = { coin: 'C', game: '★', fish: '≈', anvil: '⚒', pet: '♥', music: '♪', info: 'i' }[k] || k;
+    g.font = `900 ${glyph.length > 1 ? 50 : 72}px ${FONT}`;
     g.textAlign = 'center';
-    g.fillText(k === 'coin' ? 'C' : k, 64, 90);
+    g.fillText(glyph, 64, 90);
     tex.needsUpdate = true;
   };
   s.userData.set(kind);
   return s;
 }
 
+function nameTag(text) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 80;
+  const g = c.getContext('2d');
+  g.font = `700 40px ${FONT}`;
+  const w = Math.min(500, g.measureText(text).width + 44);
+  g.fillStyle = 'rgba(22,26,34,0.62)';
+  roundRect(g, (512 - w) / 2, 8, w, 62, 31);
+  g.fill();
+  g.fillStyle = '#fff';
+  g.textAlign = 'center';
+  g.fillText(text, 256, 53);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, toneMapped: false }));
+  s.scale.set(0.9, 0.14, 1);
+  s.renderOrder = 16;
+  return s;
+}
+
 export class NPCs {
-  constructor(scene, town, colliders, m) {
-    this.scene = scene;
-    this.rng = new RNG(4242);
-    const N = 46;
-    this.cloak = new THREE.InstancedMesh(cloakGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), N);
-    this.skin = new THREE.InstancedMesh(skinGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 }), N);
+  /**
+   * cfg: { seed, walkers, plazaR, plazaWalkers, streets: [r…], cloakColors?, specials: [{ id, name, x, z, yaw, color, marker, scale }], props?(group) }
+   */
+  constructor(scene, colliders, cfg) {
+    this.group = new THREE.Group();
+    this.group.name = 'npcs';
+    scene.add(this.group);
+    this.rng = new RNG(cfg.seed || 4242);
+    const nWalk = cfg.walkers || 0;
+    const N = nWalk + cfg.specials.length;
+    this.cloak = new THREE.InstancedMesh(cloakGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), Math.max(1, N));
+    this.skin = new THREE.InstancedMesh(skinGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 }), Math.max(1, N));
     for (const mesh of [this.cloak, this.skin]) {
       mesh.frustumCulled = false;
       mesh.castShadow = false;
-      scene.add(mesh);
+      this.group.add(mesh);
     }
-    const cloakColors = ['#6d7f99', '#8a5a44', '#4f6d4a', '#8c8c8c', '#6b4f7a', '#a0824f', '#3f5870', '#9a4a4a', '#5a5a66', '#b8a888'];
+    const cloakColors = cfg.cloakColors || ['#6d7f99', '#8a5a44', '#4f6d4a', '#8c8c8c', '#6b4f7a', '#a0824f', '#3f5870', '#9a4a4a', '#5a5a66', '#b8a888'];
     this.walkers = [];
-    const streets = town.streets.filter((r) => r > 40 && r < 100);
-    for (let i = 0; i < N - 4; i++) {
-      const plaza = i < 8;
-      const r = plaza ? 26 + this.rng.range(-1, 1) : this.rng.pick(streets) + this.rng.range(-0.5, 0.8);
+    const streets = cfg.streets || [];
+    for (let i = 0; i < nWalk; i++) {
+      const plaza = i < (cfg.plazaWalkers ?? 8);
+      const r = plaza ? cfg.plazaR + this.rng.range(-1, 1) : this.rng.pick(streets) + this.rng.range(-0.5, 0.8);
       this.walkers.push({
         r,
         a: this.rng.range(0, Math.PI * 2),
@@ -137,67 +167,36 @@ export class NPCs {
     }
     this.walkers.forEach((w, i) => this.cloak.setColorAt(i, w.color));
 
-    // interactive NPCs
     this.special = [];
-    const add = (id, name, x, z, yaw, color, marker) => {
+    this.byId = {};
+    for (const sp of cfg.specials) {
       const idx = this.walkers.length + this.special.length;
-      const npc = { id, name, pos: new THREE.Vector3(x, 0, z), yaw, idx, color: new THREE.Color(color), marker: markerSprite(marker) };
-      npc.marker.position.set(x, 2.25, z);
-      scene.add(npc.marker);
+      const npc = {
+        ...sp,
+        pos: new THREE.Vector3(sp.x, sp.y || 0, sp.z),
+        home: new THREE.Vector3(sp.x, sp.y || 0, sp.z),
+        idx,
+        scale: sp.scale || 1.05,
+        color: new THREE.Color(sp.color),
+        marker: markerSprite(sp.marker || null),
+        tag: nameTag(sp.name),
+        moving: 0,
+        phase: 0,
+        face: null,
+        visible: true,
+      };
+      npc.markerKind = sp.marker || null;
+      npc.marker.visible = !!sp.marker;
+      npc.marker.position.set(npc.pos.x, npc.pos.y + 2.25 * npc.scale, npc.pos.z);
+      this.group.add(npc.marker, npc.tag);
       this.cloak.setColorAt(idx, npc.color);
-      colliders.addCircle(x, z, 0.4);
+      npc.collider = colliders.addCircle(sp.x, sp.z, 0.4);
+      if (sp.dynamic) npc.collider.off = true;
       this.special.push(npc);
-      return npc;
-    };
-    this.ellen = add('ellen', '기사 엘렌', -5.5, -12, Math.PI * 0.8, '#2f4f8f', '!');
-    this.mora = add('mora', '상인 모라', 12.5, -9, -Math.PI * 0.62, '#6b3f7a', 'coin');
-    this.smith = add('smith', '대장장이 브로크', -12.5, 9, Math.PI * 0.35, '#7a4a2a', null);
-    this.guard = add('guard', '남문 경비병', 7, 104, Math.PI, '#4a5a6a', null);
-    this.cloak.instanceColor.needsUpdate = true;
-
-    // Mora's potion stand
-    const stand = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({ map: m.wood.map, color: 0xb08860, roughness: 0.85 });
-    const counter = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.95, 0.7), wood);
-    counter.position.set(0, 0.475, 0);
-    stand.add(counter);
-    const awn = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.05, 1.3), new THREE.MeshStandardMaterial({ map: m.fabric.map, color: 0x7a4a9a, roughness: 0.9 }));
-    awn.position.set(0, 2.35, -0.1);
-    awn.rotation.x = 0.25;
-    stand.add(awn);
-    for (const sx of [-0.85, 0.85]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.35, 0.08), wood);
-      post.position.set(sx, 1.17, 0.3);
-      stand.add(post);
+      this.byId[sp.id] = npc;
     }
-    const potionCols = [0xe74c3c, 0x3aa6ff, 0x2ecc71, 0xe74c3c, 0xe74c3c, 0xf1c40f];
-    potionCols.forEach((c, i) => {
-      const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.18, 10), new THREE.MeshStandardMaterial({ color: c, roughness: 0.15, emissive: c, emissiveIntensity: 0.35, transparent: true, opacity: 0.9 }));
-      bottle.position.set(-0.6 + i * 0.24, 1.05, 0.05);
-      stand.add(bottle);
-    });
-    stand.position.set(12.5 + Math.sin(this.mora.yaw) * 1.0, 0, -9 + Math.cos(this.mora.yaw) * 1.0);
-    stand.rotation.y = this.mora.yaw;
-    scene.add(stand);
-    colliders.addBox(stand.position.x, stand.position.z, 0.95, 0.4, this.mora.yaw);
-
-    // Brock's anvil
-    const anvil = new THREE.Group();
-    const iron = new THREE.MeshStandardMaterial({ color: 0x2c2e33, metalness: 0.8, roughness: 0.4 });
-    const top = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.18, 0.3), iron);
-    top.position.y = 0.72;
-    const horn = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 8), iron);
-    horn.rotation.z = Math.PI / 2;
-    horn.position.set(0.5, 0.74, 0);
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.6, 0.3), iron);
-    base.position.y = 0.33;
-    const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 0.1, 12), wood);
-    stump.position.y = 0.05;
-    anvil.add(top, horn, base, stump);
-    anvil.position.set(-12.5 + Math.sin(this.smith.yaw) * 1.1, 0, 9 + Math.cos(this.smith.yaw) * 1.1);
-    anvil.rotation.y = this.smith.yaw + Math.PI / 2;
-    scene.add(anvil);
-    colliders.addCircle(anvil.position.x, anvil.position.z, 0.45);
+    if (this.cloak.instanceColor) this.cloak.instanceColor.needsUpdate = true;
+    cfg.props?.(this.group, colliders, this);
 
     this._m = new THREE.Matrix4();
     this._q = new THREE.Quaternion();
@@ -208,8 +207,10 @@ export class NPCs {
   }
 
   setMarker(npc, kind) {
+    if (!npc) return;
     npc.marker.userData.set(kind);
-    npc.marker.visible = !!kind;
+    npc.markerKind = kind;
+    npc.marker.visible = !!kind && npc.visible;
   }
 
   update(dt, t, playerPos) {
@@ -235,25 +236,46 @@ export class NPCs {
       i++;
     }
     for (const n of this.special) {
-      // idle breathing, turn toward player when near
-      let yaw = n.yaw;
-      if (playerPos && playerPos.distanceTo(n.pos) < 5) yaw = Math.atan2(playerPos.x - n.pos.x, playerPos.z - n.pos.z);
-      n.curYaw = n.curYaw === undefined ? yaw : n.curYaw + Math.atan2(Math.sin(yaw - n.curYaw), Math.cos(yaw - n.curYaw)) * Math.min(1, dt * 4);
+      let yaw = n.face ?? n.yaw;
+      if (n.face === null && playerPos && playerPos.distanceTo(n.pos) < 5) yaw = Math.atan2(playerPos.x - n.pos.x, playerPos.z - n.pos.z);
+      n.curYaw = n.curYaw === undefined ? yaw : n.curYaw + Math.atan2(Math.sin(yaw - n.curYaw), Math.cos(yaw - n.curYaw)) * Math.min(1, dt * (n.moving > 0.5 ? 10 : 4));
+      n.phase += dt * n.moving * 2.2;
+      const bob = n.moving > 0.2 ? Math.abs(Math.sin(n.phase)) * 0.05 * n.scale : 0;
+      const roll = n.moving > 0.2 ? Math.sin(n.phase) * 0.05 : 0;
       const breathe = 1 + Math.sin(t * 2 + n.idx) * 0.008;
-      this._e.set(0, n.curYaw, 0, 'YXZ');
+      this._e.set(n.lean || 0, n.curYaw, roll, 'YXZ');
       this._q.setFromEuler(this._e);
-      this._m.compose(this._p.copy(n.pos), this._q, this._s.set(1.05, 1.05 * breathe, 1.05));
+      const sc = n.visible ? n.scale : 0;
+      this._m.compose(this._p.set(n.pos.x, n.pos.y + bob, n.pos.z), this._q, this._s.set(sc, sc * breathe, sc));
       this.cloak.setMatrixAt(n.idx, this._m);
       this.skin.setMatrixAt(n.idx, this._m);
-      n.marker.position.y = 2.2 + Math.sin(t * 2.5 + n.idx) * 0.06;
+      const top = n.pos.y + 2.2 * n.scale;
+      n.marker.position.set(n.pos.x, top + Math.sin(t * 2.5 + n.idx) * 0.06, n.pos.z);
+      const d = playerPos ? Math.hypot(playerPos.x - n.pos.x, playerPos.z - n.pos.z) : 99;
+      n.marker.visible = !!n.markerKind && n.visible;
+      n.tag.visible = n.visible && d < 11;
+      n.tag.position.set(n.pos.x, top - (n.marker.visible ? 0.36 : 0.05), n.pos.z);
     }
     this.cloak.instanceMatrix.needsUpdate = true;
     this.skin.instanceMatrix.needsUpdate = true;
   }
 
+  // positions for blob shadows
+  forEachPos(fn) {
+    const tmp = this._m;
+    const v = this._p;
+    for (let k = 0; k < this.walkers.length; k++) {
+      this.cloak.getMatrixAt(k, tmp);
+      v.setFromMatrixPosition(tmp);
+      fn(v.x, v.z, 0.9);
+    }
+    for (const n of this.special) if (n.visible) fn(n.pos.x, n.pos.z, 0.9 * n.scale);
+  }
+
   nearest(p, maxDist = 2.4) {
     let best = null, bd = maxDist;
     for (const n of this.special) {
+      if (!n.visible || n.noTalk) continue;
       const d = Math.hypot(p.x - n.pos.x, p.z - n.pos.z);
       if (d < bd) { bd = d; best = n; }
     }
