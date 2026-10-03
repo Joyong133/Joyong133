@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GeoBuilder, mat4, boxGeo, quadGeo, gableGeo, archWallGeo, archRingGeo, spireGeo, scaleUV } from '../core/geo.js';
 import { RNG } from '../core/noise.js';
 import { TOWN } from './layout.js';
+import { sharedFoliage } from './vegetation.js';
 
 const col = (h) => new THREE.Color(h);
 
@@ -72,7 +73,7 @@ export function addRoof(b, M, length, span, pitch, baseY, roofTint, wallKey, wal
 
 // ------------------------------------------------------------------ house
 export function addHouse(b, glows, x, z, yaw, spec, rng) {
-  const M = mat4(x, 0, z, yaw);
+  const M = mat4(x, spec.y || 0, z, yaw);
   const { w, d, floors } = spec;
   const fh = spec.fh;
   const H = floors * fh;
@@ -125,6 +126,7 @@ export function addHouse(b, glows, x, z, yaw, spec, rng) {
     const hgt = top - (H + 0.5);
     b.add('stone', boxGeo(0.75, hgt, 0.75, 2, rng.next()), mul(M, cx, H + 0.5 + hgt / 2, spec.roofType === 'side' ? -0.6 : -d / 4), stoneT.clone().multiplyScalar(0.8));
     b.add('stone', boxGeo(0.95, 0.15, 0.95, 2), mul(M, cx, top + 0.05, spec.roofType === 'side' ? -0.6 : -d / 4), stoneT.clone().multiplyScalar(0.7));
+    CHIMNEYS.push(new THREE.Vector3(cx, top + 0.2, spec.roofType === 'side' ? -0.6 : -d / 4).applyMatrix4(M));
   }
 
   // facade elements
@@ -220,6 +222,19 @@ export function addHouse(b, glows, x, z, yaw, spec, rng) {
     }
   }
 
+  // climbing ivy on some facades
+  if (spec.ivy) {
+    const n = 2 + Math.floor(rng.next() * 3);
+    const edge = rng.next() < 0.5 ? -1 : 1;
+    const ivyT = col('#d8f0c0');
+    for (let k = 0; k < n; k++) {
+      const s = rng.range(1.3, 2.3);
+      const x = edge * (w / 2 - rng.range(0.4, 1.6));
+      const y = rng.range(0.6, Math.min(H - 0.5, 1.2 + k * 1.3));
+      b.add('ivy', quadGeo(s, s * 1.2, 0.004, 0, 0.496, 1), mul(M, x, y, d / 2 + 0.05 + k * 0.012, 0, 0, rng.range(-0.5, 0.5)), ivyT.clone().multiplyScalar(rng.range(0.75, 1.0)), { ao: false });
+    }
+  }
+
   // balcony
   if (spec.balcony && floors >= 2) {
     const bw = Math.min(w - 1.2, 3.4);
@@ -255,6 +270,42 @@ export function addLamp(b, glows, x, z, yaw = 0) {
   const p = new THREE.Vector3(0, 3.28, 0.45).applyMatrix4(M);
   glows.add(p.x, p.y, p.z, 1.3, 0xffa556, 0.25);
   glows.add(p.x, p.y, p.z, 0.45, 0xffe0b0, 0.1);
+  LAMPS.push(new THREE.Vector3(p.x, 0, p.z));
+}
+
+// lamp positions collected while building (for ground light pools)
+const LAMPS = [];
+export function takeLamps() {
+  return LAMPS.splice(0, LAMPS.length);
+}
+
+// Warm pools of lamplight on the cobbles: one additive instanced decal.
+export function lightPools(points, heightAt = () => 0, radius = 3.2, intensity = 0.3) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, 'rgba(255,190,120,1)');
+  grd.addColorStop(0.35, 'rgba(255,160,90,0.45)');
+  grd.addColorStop(1, 'rgba(255,140,70,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const geo = new THREE.PlaneGeometry(radius * 2, radius * 2);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: intensity, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, toneMapped: true });
+  const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, points.length));
+  const m = new THREE.Matrix4();
+  points.forEach((p, i) => {
+    m.makeTranslation(p.x, heightAt(p.x, p.z) + 0.04, p.z);
+    mesh.setMatrixAt(i, m);
+  });
+  mesh.count = points.length;
+  mesh.renderOrder = 1;
+  mesh.name = 'lightPools';
+  mesh.computeBoundingSphere();
+  return mesh;
 }
 
 export function addStall(b, glows, x, z, yaw, rng) {
@@ -531,8 +582,15 @@ export function addFountain(b, colliders, glows, p) {
 }
 
 // ------------------------------------------------------------------ main
+// chimney tops collected while houses are built (for smoke)
+const CHIMNEYS = [];
+export function takeChimneys() {
+  return CHIMNEYS.splice(0, CHIMNEYS.length);
+}
+
 export function buildTown(m, tex, colliders, glows) {
   templates();
+  if (!m.ivy) m.ivy = sharedFoliage().vineMat;
   const rng = new RNG(1337);
   const b = new GeoBuilder();
   const treeSpots = [];
@@ -651,6 +709,7 @@ export function buildTown(m, tex, colliders, glows) {
         shop: (ri === 0 || ri === 2) && rng.chance(0.35) ? rng.pick(shopTypes) : null,
         backDoor: rng.chance(0.3),
         braces: rng.chance(0.5),
+        ivy: rng.chance(0.22),
       };
       if (spec.roofType === 'front' && w > 8.5) spec.pitch = Math.min(spec.pitch, 0.8);
       const yaw = tc + Math.PI;
@@ -737,5 +796,6 @@ export function buildTown(m, tex, colliders, glows) {
   addWall(b, colliders, glows, rng);
 
   const group = b.build(m, { name: 'town' });
-  return { group, treeSpots, npcSpots, cathedral, houses, streets: [30.5, ...streetR, 106], squares };
+  group.add(lightPools(takeLamps()));
+  return { group, treeSpots, npcSpots, cathedral, houses, streets: [30.5, ...streetR, 106], squares, chimneys: takeChimneys() };
 }

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 
 export const SWORDS = {
   starter: {
+    id: 'starter',
     name: '초심자의 장검',
     desc: '시작의 마을 대장간에서 지급하는 평범한 장검. 가볍고 다루기 쉽다. (공격력 +0%)',
     blade: 0xd9dee7,
@@ -13,6 +14,7 @@ export const SWORDS = {
     skill: 0x4ab8ff,
   },
   azure: {
+    id: 'azure',
     name: '청은의 장검',
     desc: '보어 킹의 어금니로 벼려낸 푸른 은빛 장검. 소드 스킬의 위력이 크게 오른다. (공격력 +50%)',
     blade: 0x2b3140,
@@ -22,6 +24,7 @@ export const SWORDS = {
     skill: 0x6fe8ff,
   },
   terra: {
+    id: 'terra',
     name: '대지의 검 테라',
     desc: '메사의 심장석과 타우러스의 뿔로 벼린 황금빛 장검. 묵직하지만 휘두를 때마다 대지의 힘이 실린다. (공격력 +110%)',
     blade: 0x8a7a5a,
@@ -32,89 +35,147 @@ export const SWORDS = {
   },
 };
 
-function bladeGeometry(len = 0.95, w = 0.043, t = 0.0065, tipLen = 0.2) {
-  const segs = 10;
-  const pos = [];
-  const idx = [];
-  for (let i = 0; i <= segs; i++) {
-    const u = i / segs;
-    const y = 0.12 + u * len;
+// Hexagonal blade cross-section: flat faces + bevelled cutting edges, built
+// as two meshes so the bevels can have their own (glossier / glowing) material.
+function bladeParts(len = 0.93, w = 0.04, t = 0.0062, bevel = 0.011, tipLen = 0.21, ricasso = 0.05) {
+  const segs = 14;
+  const flat = [], edge = [];
+  const ring = (u) => {
+    const y = 0.125 + u * len;
     const fromTip = (1 - u) * len;
-    const k = fromTip < tipLen ? Math.pow(fromTip / tipLen, 0.8) : 1;
-    const ww = w * k * (1 - u * 0.12);
-    const tt = t * (0.35 + 0.65 * k);
-    pos.push(-ww, y, 0, 0, y, tt, ww, y, 0, 0, y, -tt);
-  }
+    const k = fromTip < tipLen ? Math.pow(fromTip / tipLen, 0.85) : 1;
+    const ric = u * len < ricasso ? 0.82 : 1;
+    const ww = w * k * (1 - u * 0.1) * ric;
+    const bb = Math.min(bevel * (0.6 + 0.4 * k), ww * 0.9);
+    const tt = t * (0.45 + 0.55 * k);
+    // order: right edge, right-top, left-top, left edge, left-bottom, right-bottom
+    return [[ww, y, 0], [ww - bb, y, tt], [-(ww - bb), y, tt], [-ww, y, 0], [-(ww - bb), y, -tt], [ww - bb, y, -tt]];
+  };
+  const quad = (arr, a, b, c, d) => arr.push(...a, ...b, ...c, ...b, ...d, ...c);
   for (let i = 0; i < segs; i++) {
-    const a = i * 4, b = (i + 1) * 4;
-    for (let f = 0; f < 4; f++) {
-      const f1 = (f + 1) % 4;
-      idx.push(a + f, a + f1, b + f, a + f1, b + f1, b + f);
-    }
+    const r0 = ring(i / segs), r1 = ring((i + 1) / segs);
+    const faces = [[0, 1, 'e'], [1, 2, 'f'], [2, 3, 'e'], [3, 4, 'e'], [4, 5, 'f'], [5, 0, 'e']];
+    for (const [p, q, kind] of faces) quad(kind === 'f' ? flat : edge, r0[p], r0[q], r1[p], r1[q]);
   }
   // base cap
-  idx.push(0, 2, 1, 0, 3, 2);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  const ng = g.toNonIndexed();
-  ng.computeVertexNormals();
-  return ng;
+  const r0 = ring(0);
+  for (const [a, b2, c] of [[0, 1, 5], [1, 2, 5], [2, 4, 5], [2, 3, 4]]) flat.push(...r0[a], ...r0[c], ...r0[b2]);
+  const mk = (arr) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+    g.computeVertexNormals();
+    return g;
+  };
+  return { flat: mk(flat), edge: mk(edge) };
 }
 
+// tapered tube along a list of points (radius r0 → r1)
+function taperTube(pts, r0, r1, radial = 8) {
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const tube = new THREE.TubeGeometry(curve, 16, 1, radial, false);
+  const p = tube.attributes.position;
+  const n = tube.attributes.normal;
+  const steps = 17;
+  for (let i = 0; i < p.count; i++) {
+    const seg = Math.floor(i / (radial + 1));
+    const t = seg / (steps - 1);
+    const c = curve.getPointAt(Math.min(1, t));
+    const r = r0 + (r1 - r0) * t;
+    p.setXYZ(i, c.x + n.getX(i) * r, c.y + n.getY(i) * r, c.z + n.getZ(i) * r);
+  }
+  tube.computeVertexNormals();
+  return tube;
+}
+
+const STYLE = {
+  starter: { flat: 0xc9ced6, rough: 0.34, edgeRough: 0.14, fuller: 0x6a707a, wrap: 0x4a2e1c, quillon: 'straight' },
+  azure: { flat: 0x232835, rough: 0.28, edgeRough: 0.1, fuller: 0x0e1420, wrap: 0x1c2230, quillon: 'swept' },
+  terra: { flat: 0x9a8258, rough: 0.3, edgeRough: 0.12, fuller: 0x5a4224, wrap: 0x3a2412, quillon: 'swept' },
+};
+
 export function buildSwordModel(def) {
+  const st = STYLE[def.id] || STYLE[Object.keys(SWORDS).find((k) => SWORDS[k] === def)] || STYLE.starter;
   const group = new THREE.Group();
-  const bladeMat = new THREE.MeshStandardMaterial({ color: def.blade, metalness: 0.95, roughness: 0.28, emissive: 0x000000, envMapIntensity: 1.0 });
-  const guardMat = new THREE.MeshStandardMaterial({ color: def.guard, metalness: 0.9, roughness: 0.35 });
-  const gripMat = new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.85 });
-  const gemMat = new THREE.MeshStandardMaterial({ color: 0x1a3a6a, emissive: def.edge, emissiveIntensity: 1.2, roughness: 0.2 });
-  const blade = new THREE.Mesh(bladeGeometry(), bladeMat);
-  group.add(blade);
-  // edge glow strip (becomes bright during sword skills)
-  const edgeMat = new THREE.MeshBasicMaterial({ color: def.edge, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-  const edge = new THREE.Mesh(bladeGeometry(0.97, 0.056, 0.012, 0.22), edgeMat);
-  edge.position.y = -0.005;
-  group.add(edge);
-  // fuller line
-  const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.62, 0.0135), new THREE.MeshStandardMaterial({ color: 0x5a6070, metalness: 1, roughness: 0.3 }));
-  fuller.position.y = 0.12 + 0.35;
-  group.add(fuller);
-  // cross guard
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.026, 0.036), guardMat);
-  guard.position.y = 0.105;
-  group.add(guard);
+  const bladeMat = new THREE.MeshStandardMaterial({ color: st.flat, metalness: 0.95, roughness: st.rough, emissive: 0x000000, envMapIntensity: 1.1 });
+  const bevelMat = new THREE.MeshStandardMaterial({ color: def.id === 'azure' ? 0x9fb6d0 : 0xeef2f6, metalness: 1, roughness: st.edgeRough, emissive: 0x000000, envMapIntensity: 1.4 });
+  const guardMat = new THREE.MeshStandardMaterial({ color: def.guard, metalness: 0.9, roughness: 0.3 });
+  const gripMat = new THREE.MeshStandardMaterial({ color: st.wrap, roughness: 0.75 });
+  const gemMat = new THREE.MeshStandardMaterial({ color: 0x1a3a6a, emissive: def.edge, emissiveIntensity: 1.2, roughness: 0.15, metalness: 0.2 });
+  const parts = bladeParts();
+  group.add(new THREE.Mesh(parts.flat, bladeMat));
+  group.add(new THREE.Mesh(parts.edge, bevelMat));
+  // fuller grooves on both faces
+  const fullerMat = new THREE.MeshStandardMaterial({ color: st.fuller, metalness: 1, roughness: 0.35 });
   for (const s of [-1, 1]) {
-    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.02, 10, 8), guardMat);
-    tip.position.set(s * 0.105, 0.115, 0);
-    group.add(tip);
-    const wing = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.05, 6), guardMat);
-    wing.position.set(s * 0.06, 0.13, 0);
-    wing.rotation.z = -s * 0.5;
-    group.add(wing);
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(0.011, 0.6), fullerMat);
+    f.position.set(0, 0.125 + 0.36, s * 0.0058);
+    if (s < 0) f.rotation.y = Math.PI;
+    group.add(f);
   }
-  const center = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.045), guardMat);
-  center.position.y = 0.105;
-  group.add(center);
-  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.013, 0), gemMat);
-  gem.position.set(0, 0.105, 0.024);
-  group.add(gem);
-  // grip with wrap rings
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.19, 10), gripMat);
-  grip.position.y = -0.0;
-  group.add(grip);
-  for (let i = 0; i < 5; i++) {
-    const r = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0035, 5, 12), gripMat);
-    r.rotation.x = Math.PI / 2;
-    r.position.y = -0.08 + i * 0.04;
-    group.add(r);
+  // edge glow shell (sword skills)
+  const edgeMat = new THREE.MeshBasicMaterial({ color: def.edge, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const shell = bladeParts(0.95, 0.052, 0.011, 0.02, 0.23);
+  const edgeMesh = new THREE.Mesh(shell.edge, edgeMat);
+  edgeMesh.position.y = -0.006;
+  group.add(edgeMesh);
+  // cross guard: tapered, slightly swept quillons + centre block
+  for (const s of [-1, 1]) {
+    const sweep = st.quillon === 'swept' ? 0.035 : 0.008;
+    const q = taperTube([
+      new THREE.Vector3(0, 0.105, 0),
+      new THREE.Vector3(s * 0.055, 0.106, 0),
+      new THREE.Vector3(s * 0.1, 0.105 + sweep * 0.6, 0),
+      new THREE.Vector3(s * 0.125, 0.105 + sweep, 0),
+    ], 0.012, 0.0075, 8);
+    group.add(new THREE.Mesh(q, guardMat));
+    const end = new THREE.Mesh(new THREE.SphereGeometry(0.0115, 10, 8), guardMat);
+    end.position.set(s * 0.127, 0.105 + sweep, 0);
+    group.add(end);
   }
-  const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.026, 14, 10), guardMat);
-  pommel.position.y = -0.115;
+  const block = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.02, 0.036, 6), guardMat);
+  block.position.y = 0.105;
+  block.rotation.y = Math.PI / 6;
+  group.add(block);
+  const langet = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.04, 4), guardMat);
+  langet.position.y = 0.14;
+  langet.scale.set(1, 1, 0.45);
+  group.add(langet);
+  for (const s of [-1, 1]) {
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.011, 0), gemMat);
+    gem.position.set(0, 0.105, s * 0.02);
+    gem.scale.set(1, 1.3, 0.5);
+    group.add(gem);
+  }
+  // grip: core + spiral leather wrap
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.0155, 0.017, 0.19, 12), gripMat);
+  group.add(core);
+  const helix = [];
+  for (let i = 0; i <= 64; i++) {
+    const a = i * 0.62;
+    helix.push(new THREE.Vector3(Math.cos(a) * 0.0165, -0.088 + (i / 64) * 0.176, Math.sin(a) * 0.0165));
+  }
+  const wrap = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(helix), 160, 0.0034, 5, false), gripMat);
+  group.add(wrap);
+  for (const y of [-0.093, 0.092]) {
+    const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.01, 12), guardMat);
+    ferrule.position.y = y;
+    group.add(ferrule);
+  }
+  // faceted pommel with a gem
+  const pommel = new THREE.Mesh(
+    new THREE.LatheGeometry([new THREE.Vector2(0.0, -0.148), new THREE.Vector2(0.016, -0.143), new THREE.Vector2(0.027, -0.124), new THREE.Vector2(0.024, -0.106), new THREE.Vector2(0.012, -0.098), new THREE.Vector2(0.0, -0.097)], 8),
+    guardMat
+  );
+  pommel.material = guardMat.clone();
+  pommel.material.flatShading = true;
   group.add(pommel);
+  const pgem = new THREE.Mesh(new THREE.OctahedronGeometry(0.009, 0), gemMat);
+  pgem.position.y = -0.149;
+  group.add(pgem);
   group.traverse((o) => {
     if (o.isMesh) o.castShadow = false;
   });
-  return { group, bladeMat, edgeMat, gemMat, guardMat };
+  return { group, bladeMat, bevelMat, edgeMat, gemMat, guardMat };
 }
 
 // Ribbon trail made from the last N blade positions.
@@ -318,7 +379,8 @@ export class Sword {
   setGlow(v) {
     this.glow = v;
     this.model.edgeMat.opacity = v * 0.9;
-    this.model.bladeMat.emissive.copy(this.skillColor).multiplyScalar(v * 0.6);
+    this.model.bladeMat.emissive.copy(this.skillColor).multiplyScalar(v * 0.35);
+    this.model.bevelMat.emissive.copy(this.skillColor).multiplyScalar(v * 1.6);
     this.model.gemMat.emissiveIntensity = 1.2 + v * 3;
   }
 

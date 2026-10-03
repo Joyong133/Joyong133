@@ -10,10 +10,13 @@ import { SUN_DIR } from './layout.js';
 import { Colliders } from './collision.js';
 import { buildTown } from './town.js';
 import { buildCastle } from './castle.js';
-import { buildVegetation } from './vegetation.js';
+import { buildVegetation, setVegetationRenderer } from './vegetation.js';
+import { setFoliageSun } from './foliage.js';
 import { buildWater } from './water.js';
 import { GlowField } from './glow.js';
 import { buildGates } from './gate.js';
+import { buildFarms } from './farms.js';
+import { heightF1 } from './layout.js';
 
 export async function buildWorld(renderer, scene, quality, progress) {
   const step = async (p, text) => {
@@ -72,11 +75,17 @@ export async function buildWorld(renderer, scene, quality, progress) {
   root.add(castle.group);
 
   await step(0.72, '숲과 초원을 가꾸는 중…');
+  setVegetationRenderer(renderer, sky.environment);
+  setFoliageSun(SUN_DIR);
   const veg = buildVegetation(m, tex, colliders, heightTex, quality);
   veg.addTownTrees(town.treeSpots);
   veg.finalize();
   root.add(veg.group);
   root.add(veg.grass);
+
+  await step(0.8, '밭과 풍차를 일구는 중…');
+  const farms = buildFarms(m, colliders, glows, heightF1, heightTex, quality);
+  root.add(farms.group);
 
   await step(0.84, '물과 전이문을 여는 중…');
   const water = buildWater(sky);
@@ -90,11 +99,13 @@ export async function buildWorld(renderer, scene, quality, progress) {
   renderer.shadowMap.needsUpdate = true;
 
   return {
-    root, sky, sun, hemi, terrain, colliders, heightTex, town, castle, veg, water, gates, glows, tex, m,
+    root, sky, sun, hemi, terrain, colliders, heightTex, town, castle, veg, farms, water, gates, glows, tex, m,
     update(dt, t, center) {
       water.update(t);
       gates.update(dt, t);
       veg.update(t, center);
+      farms.update(t, center);
+      castle.group.userData.update?.(t);
       glows.update(t);
     },
   };

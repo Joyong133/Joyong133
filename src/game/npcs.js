@@ -6,77 +6,135 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG } from '../core/noise.js';
 import { FONT, roundRect } from './ui.js';
 
-function colored(geo, color, shade = true) {
+// tintSel per vertex: 0 = fixed colour, 1 = per-instance tint A, 2 = tint B
+function paint(geo, color, sel = 0, shade = true) {
   const g = geo.index ? geo.toNonIndexed() : geo;
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', g.attributes.position);
   out.setAttribute('normal', g.attributes.normal);
   const p = out.attributes.position;
   const c = new Float32Array(p.count * 3);
+  const t = new Float32Array(p.count).fill(sel);
   const base = new THREE.Color(color);
   for (let i = 0; i < p.count; i++) {
-    const k = shade ? 0.55 + 0.45 * Math.min(1, Math.max(0, p.getY(i) / 1.5)) : 1;
+    const k = shade ? 0.6 + 0.4 * Math.min(1, Math.max(0, p.getY(i) / 1.5)) : 1;
     c[i * 3] = base.r * k; c[i * 3 + 1] = base.g * k; c[i * 3 + 2] = base.b * k;
   }
   out.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  out.setAttribute('tintSel', new THREE.BufferAttribute(t, 1));
   return out;
 }
+const SKIN = 0xf0c8a8;
 
-function cloakGeometry() {
-  const prof = [
-    [0.0, 0.03], [0.34, 0.03], [0.3, 0.3], [0.25, 0.8], [0.23, 1.12], [0.26, 1.32], [0.2, 1.42], [0.09, 1.46], [0.0, 1.47],
-  ].map(([x, y]) => new THREE.Vector2(x, y));
-  const body = new THREE.LatheGeometry(prof, 10);
-  const hood = new THREE.SphereGeometry(0.155, 9, 5, 0, Math.PI * 2, 0, Math.PI * 0.62);
-  hood.rotateX(-0.35);
-  hood.translate(0, 1.6, -0.03);
-  const sleeveL = new THREE.CylinderGeometry(0.06, 0.1, 0.6, 6, 1, true);
-  sleeveL.rotateZ(0.18);
-  sleeveL.rotateX(-0.25);
-  sleeveL.translate(0.27, 1.08, 0.06);
-  const sleeveR = sleeveL.clone();
-  sleeveR.scale(-1, 1, 1);
-  const belt = new THREE.TorusGeometry(0.24, 0.025, 4, 12);
+// torso + head (+ hair, face, belt). Local +Z forward, feet at y = 0.
+function bodyGeometry() {
+  const prof = [[0.0, 0.58], [0.215, 0.58], [0.205, 0.72], [0.18, 0.92], [0.2, 1.1], [0.215, 1.28], [0.2, 1.4], [0.09, 1.47], [0.0, 1.48]].map(([x, y]) => new THREE.Vector2(x, y));
+  const tunic = new THREE.LatheGeometry(prof, 10);
+  tunic.scale(1, 1, 0.78);
+  const collar = new THREE.TorusGeometry(0.075, 0.025, 4, 10);
+  collar.rotateX(Math.PI / 2);
+  collar.translate(0, 1.47, 0);
+  const belt = new THREE.TorusGeometry(0.18, 0.028, 3, 12);
   belt.rotateX(Math.PI / 2);
-  belt.translate(0, 0.95, 0);
+  belt.scale(1, 1, 0.8);
+  belt.translate(0, 0.94, 0);
+  const buckle = new THREE.BoxGeometry(0.06, 0.05, 0.02);
+  buckle.translate(0, 0.94, 0.15);
+  const neck = new THREE.CylinderGeometry(0.045, 0.05, 0.1, 8);
+  neck.translate(0, 1.52, 0);
+  const head = new THREE.SphereGeometry(0.105, 10, 7);
+  head.scale(1, 1.12, 1.02);
+  head.translate(0, 1.64, 0.01);
+  const nose = new THREE.ConeGeometry(0.018, 0.04, 5);
+  nose.rotateX(Math.PI / 2);
+  nose.translate(0, 1.63, 0.115);
+  const ears = [-1, 1].map((s) => new THREE.SphereGeometry(0.022, 4, 3).scale(0.6, 1, 1).translate(s * 0.104, 1.64, 0));
+  const eyes = [-1, 1].map((s) => new THREE.SphereGeometry(0.014, 4, 3).translate(s * 0.038, 1.665, 0.098));
+  const brows = [-1, 1].map((s) => new THREE.BoxGeometry(0.035, 0.008, 0.01).translate(s * 0.038, 1.69, 0.103));
+  const mouth = new THREE.BoxGeometry(0.04, 0.007, 0.01).translate(0, 1.6, 0.104);
+  const hair = new THREE.SphereGeometry(0.114, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  hair.scale(1, 1.08, 1.04);
+  hair.rotateX(-0.42);
+  hair.translate(0, 1.66, -0.005);
+  const hairBack = new THREE.SphereGeometry(0.11, 7, 4, Math.PI * 0.6, Math.PI * 0.8, Math.PI * 0.3, Math.PI * 0.45);
+  hairBack.translate(0, 1.64, -0.012);
   return mergeGeometries([
-    colored(body, 0xe8e8e8),
-    colored(hood, 0xdddddd, false),
-    colored(sleeveL, 0xd8d8d8),
-    colored(sleeveR, 0xd8d8d8),
-    colored(belt, 0x5a5a5a, false),
+    paint(tunic, 0xeeeeee, 1),
+    paint(collar, 0xdddddd, 1, false),
+    paint(belt, 0x3a2a1e, 0, false),
+    paint(buckle, 0xc9a24a, 0, false),
+    paint(neck, SKIN, 0, false),
+    paint(head, SKIN, 0, false),
+    paint(nose, 0xe8b898, 0, false),
+    ...ears.map((e) => paint(e, 0xe8b898, 0, false)),
+    ...eyes.map((e) => paint(e, 0x1a1410, 0, false)),
+    ...brows.map((e) => paint(e, 0xffffff, 2, false)),
+    paint(mouth, 0xa86a5a, 0, false),
+    paint(hair, 0xffffff, 2, false),
+    paint(hairBack, 0xffffff, 2, false),
   ]);
 }
 
-function skinGeometry() {
-  const head = new THREE.SphereGeometry(0.115, 10, 7);
-  head.translate(0, 1.6, 0.02);
-  const hair = new THREE.SphereGeometry(0.122, 9, 4, 0, Math.PI * 2, 0, Math.PI * 0.5);
-  hair.rotateX(-0.5);
-  hair.translate(0, 1.63, 0.0);
-  const handL = new THREE.SphereGeometry(0.045, 5, 4);
-  handL.translate(0.33, 0.78, 0.16);
-  const handR = handL.clone();
-  handR.translate(-0.66, 0, 0);
-  const eyeL = new THREE.SphereGeometry(0.015, 4, 3);
-  eyeL.translate(0.04, 1.62, 0.125);
-  const eyeR = eyeL.clone();
-  eyeR.translate(-0.08, 0, 0);
-  const bootL = new THREE.BoxGeometry(0.1, 0.08, 0.2);
-  bootL.translate(0.1, 0.04, 0.12);
-  const bootR = bootL.clone();
-  bootR.translate(-0.2, 0, 0);
-  return mergeGeometries([
-    colored(head, 0xf0c8a8, false),
-    colored(hair, 0x4a3020, false),
-    colored(handL, 0xf0c8a8, false),
-    colored(handR, 0xf0c8a8, false),
-    colored(eyeL, 0x1a1a1a, false),
-    colored(eyeR, 0x1a1a1a, false),
-    colored(bootL, 0x3a2a1e, false),
-    colored(bootR, 0x3a2a1e, false),
-  ]);
+// one leg, pivot at the hip; trousers tinted (A), boot fixed
+function legGeometry() {
+  const leg = new THREE.CylinderGeometry(0.068, 0.052, 0.74, 8, 2);
+  leg.translate(0, -0.37, 0);
+  const boot = new THREE.BoxGeometry(0.105, 0.11, 0.22);
+  boot.translate(0, -0.775, 0.035);
+  const cuff = new THREE.CylinderGeometry(0.062, 0.062, 0.06, 8);
+  cuff.translate(0, -0.7, 0);
+  return mergeGeometries([paint(leg, 0xffffff, 1, false), paint(boot, 0x3a2a1e, 0, false), paint(cuff, 0x2e2218, 0, false)]);
 }
+
+// one arm, pivot at the shoulder; sleeve tinted like the tunic (A)
+function armGeometry() {
+  const sleeve = new THREE.CylinderGeometry(0.058, 0.046, 0.5, 7, 2);
+  sleeve.translate(0, -0.25, 0);
+  const hand = new THREE.SphereGeometry(0.042, 7, 5);
+  hand.scale(0.85, 1.2, 0.7);
+  hand.translate(0, -0.55, 0.01);
+  return mergeGeometries([paint(sleeve, 0xe4e4e4, 1, false), paint(hand, SKIN, 0, false)]);
+}
+
+function tintMaterial(roughness) {
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness });
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float tintSel;\nattribute vec3 iTintA;\nattribute vec3 iTintB;')
+      .replace('#include <color_vertex>', `#include <color_vertex>
+  vColor.rgb *= tintSel < 0.5 ? vec3(1.0) : (tintSel < 1.5 ? iTintA : iTintB);`);
+    // soft rim light so figures read clearly against busy backgrounds
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+  { float rim = pow(1.0 - max(dot(normal, normalize(vViewPosition)), 0.0), 3.0);
+    reflectedLight.indirectDiffuse += diffuseColor.rgb * rim * 0.35; }`
+    );
+  };
+  mat.customProgramCacheKey = () => 'npc-tint';
+  return mat;
+}
+
+function tintedInstances(geo, mat, count) {
+  const g = geo.clone();
+  const a = new THREE.InstancedBufferAttribute(new Float32Array(count * 3).fill(1), 3);
+  const b = new THREE.InstancedBufferAttribute(new Float32Array(count * 3).fill(1), 3);
+  g.setAttribute('iTintA', a);
+  g.setAttribute('iTintB', b);
+  const mesh = new THREE.InstancedMesh(g, mat, Math.max(1, count));
+  mesh.frustumCulled = false;
+  mesh.castShadow = false;
+  mesh.userData.setTint = (i, ca, cb) => {
+    a.setXYZ(i, ca.r, ca.g, ca.b);
+    if (cb) b.setXYZ(i, cb.r, cb.g, cb.b);
+    a.needsUpdate = b.needsUpdate = true;
+  };
+  return mesh;
+}
+
+const HAIR = ['#1e1612', '#3a2618', '#5a3a22', '#8a5a2e', '#c99a5a', '#b04a2a', '#7a7470', '#2a2a30'];
+const PANTS = ['#3a3028', '#4a4a50', '#2e3440', '#5a4632', '#3a4232', '#6a5a48'];
+const HIP = 0.86, HIP_X = 0.095, SHOULDER = 1.38, SHOULDER_X = 0.235;
 
 export function markerSprite(kind) {
   const c = document.createElement('canvas');
@@ -141,13 +199,21 @@ export class NPCs {
     this.rng = new RNG(cfg.seed || 4242);
     const nWalk = cfg.walkers || 0;
     const N = nWalk + cfg.specials.length;
-    this.cloak = new THREE.InstancedMesh(cloakGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }), Math.max(1, N));
-    this.skin = new THREE.InstancedMesh(skinGeometry(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 }), Math.max(1, N));
-    for (const mesh of [this.cloak, this.skin]) {
-      mesh.frustumCulled = false;
-      mesh.castShadow = false;
-      this.group.add(mesh);
-    }
+    const mat = tintMaterial(0.85);
+    this.body = tintedInstances(bodyGeometry(), mat, N);
+    this.legs = tintedInstances(legGeometry(), mat, N * 2);
+    this.arms = tintedInstances(armGeometry(), mat, N * 2);
+    this.cloak = this.body; // positions are read back from the body instances
+    this.group.add(this.body, this.legs, this.arms);
+    const paintPerson = (idx, tunic, rng) => {
+      const hair = new THREE.Color(rng.pick(HAIR));
+      const pants = new THREE.Color(rng.pick(PANTS));
+      this.body.userData.setTint(idx, tunic, hair);
+      this.legs.userData.setTint(idx * 2, pants);
+      this.legs.userData.setTint(idx * 2 + 1, pants);
+      this.arms.userData.setTint(idx * 2, tunic);
+      this.arms.userData.setTint(idx * 2 + 1, tunic);
+    };
     const cloakColors = cfg.cloakColors || ['#6d7f99', '#8a5a44', '#4f6d4a', '#8c8c8c', '#6b4f7a', '#a0824f', '#3f5870', '#9a4a4a', '#5a5a66', '#b8a888'];
     this.walkers = [];
     const streets = cfg.streets || [];
@@ -165,7 +231,7 @@ export class NPCs {
         color: new THREE.Color(this.rng.pick(cloakColors)),
       });
     }
-    this.walkers.forEach((w, i) => this.cloak.setColorAt(i, w.color));
+    this.walkers.forEach((w, i) => paintPerson(i, w.color, this.rng));
 
     this.special = [];
     this.byId = {};
@@ -189,13 +255,12 @@ export class NPCs {
       npc.marker.visible = !!sp.marker;
       npc.marker.position.set(npc.pos.x, npc.pos.y + 2.25 * npc.scale, npc.pos.z);
       this.group.add(npc.marker, npc.tag);
-      this.cloak.setColorAt(idx, npc.color);
+      paintPerson(idx, npc.color, this.rng);
       npc.collider = colliders.addCircle(sp.x, sp.z, 0.4);
       if (sp.dynamic) npc.collider.off = true;
       this.special.push(npc);
       this.byId[sp.id] = npc;
     }
-    if (this.cloak.instanceColor) this.cloak.instanceColor.needsUpdate = true;
     cfg.props?.(this.group, colliders, this);
 
     this._m = new THREE.Matrix4();
@@ -203,7 +268,11 @@ export class NPCs {
     this._e = new THREE.Euler();
     this._p = new THREE.Vector3();
     this._s = new THREE.Vector3();
-    this.cloak.count = this.skin.count = this.walkers.length + this.special.length;
+    this._m2 = new THREE.Matrix4();
+    this._m3 = new THREE.Matrix4();
+    const n = this.walkers.length + this.special.length;
+    this.body.count = n;
+    this.legs.count = this.arms.count = n * 2;
   }
 
   setMarker(npc, kind) {
@@ -226,13 +295,13 @@ export class NPCs {
         w.phase += dt * w.speed * 5.5;
       }
       const yaw = w.a + (w.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
-      const bob = moving ? Math.abs(Math.sin(w.phase)) * 0.04 : 0;
-      const roll = moving ? Math.sin(w.phase) * 0.04 : 0;
+      w.walk = THREE.MathUtils.lerp(w.walk || 0, moving ? 1 : 0, Math.min(1, dt * 6));
+      const bob = Math.abs(Math.sin(w.phase)) * 0.035 * w.walk;
+      const roll = Math.sin(w.phase) * 0.025 * w.walk;
       this._e.set(0, yaw, roll, 'YXZ');
       this._q.setFromEuler(this._e);
       this._m.compose(this._p.set(x, bob, z), this._q, this._s.set(w.h, w.h, w.h));
-      this.cloak.setMatrixAt(i, this._m);
-      this.skin.setMatrixAt(i, this._m);
+      this.pose(i, this._m, w.phase, w.walk, t);
       i++;
     }
     for (const n of this.special) {
@@ -247,8 +316,7 @@ export class NPCs {
       this._q.setFromEuler(this._e);
       const sc = n.visible ? n.scale : 0;
       this._m.compose(this._p.set(n.pos.x, n.pos.y + bob, n.pos.z), this._q, this._s.set(sc, sc * breathe, sc));
-      this.cloak.setMatrixAt(n.idx, this._m);
-      this.skin.setMatrixAt(n.idx, this._m);
+      this.pose(n.idx, this._m, n.phase * 2.5, n.visible ? Math.min(1, n.moving) : 0, t);
       const top = n.pos.y + 2.2 * n.scale;
       n.marker.position.set(n.pos.x, top + Math.sin(t * 2.5 + n.idx) * 0.06, n.pos.z);
       const d = playerPos ? Math.hypot(playerPos.x - n.pos.x, playerPos.z - n.pos.z) : 99;
@@ -256,8 +324,28 @@ export class NPCs {
       n.tag.visible = n.visible && d < 11;
       n.tag.position.set(n.pos.x, top - (n.marker.visible ? 0.36 : 0.05), n.pos.z);
     }
-    this.cloak.instanceMatrix.needsUpdate = true;
-    this.skin.instanceMatrix.needsUpdate = true;
+    this.body.instanceMatrix.needsUpdate = true;
+    this.legs.instanceMatrix.needsUpdate = true;
+    this.arms.instanceMatrix.needsUpdate = true;
+  }
+
+  // body matrix + swinging legs/arms (opposite phase), idle arm sway
+  pose(i, M, phase, walk, t) {
+    this.body.setMatrixAt(i, M);
+    const swing = Math.sin(phase) * 0.55 * walk;
+    const idle = Math.sin(t * 1.3 + i) * 0.04 * (1 - walk);
+    for (let s = 0; s < 2; s++) {
+      const side = s === 0 ? -1 : 1;
+      const legA = side * swing;
+      this._m2.makeRotationX(legA);
+      this._m2.setPosition(side * HIP_X, HIP, 0);
+      this.legs.setMatrixAt(i * 2 + s, this._m3.multiplyMatrices(M, this._m2));
+      const armA = -side * swing * 0.75 + idle;
+      this._e.set(armA, 0, side * 0.09, 'XYZ');
+      this._m2.makeRotationFromEuler(this._e);
+      this._m2.setPosition(side * SHOULDER_X, SHOULDER, 0);
+      this.arms.setMatrixAt(i * 2 + s, this._m3.multiplyMatrices(M, this._m2));
+    }
   }
 
   // positions for blob shadows

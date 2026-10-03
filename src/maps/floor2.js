@@ -14,7 +14,8 @@ import { buildVegetation } from '../world/vegetation.js';
 import { waterMaterial, fallMaterial } from '../world/water.js';
 import { GlowField } from '../world/glow.js';
 import { gateMaterials, makeGate, updateGateMaterials } from '../world/gate.js';
-import { templates, addHouse, addLamp, addBench, addStall, PAL } from '../world/town.js';
+import { templates, addHouse, addLamp, addBench, addStall, PAL, takeChimneys, takeLamps, lightPools } from '../world/town.js';
+import { Ambience } from '../world/ambience.js';
 import { pierSpec, pierHeight, pierPoint, buildPier } from './pier.js';
 import { part } from '../game/monsterRigs.js';
 
@@ -604,6 +605,21 @@ export async function makeFloor2(world, game, progress) {
   const mainGate = makeGate(b, gateGroup, gm, glows, colliders, new THREE.Vector3(0, 0, 0), 0, 1);
   const outside = buildOutside(b, glows, colliders, rng, gm, gateGroup);
   root.add(b.build(m, { name: 'mesaria' }), gateGroup);
+  root.add(lightPools(takeLamps(), heightF2));
+  const ambience = new Ambience({
+    quality: game.quality,
+    chimneys: takeChimneys(),
+    height: heightF2,
+    birdAreas: [
+      { x: 0, z: 0, r: 60, y: 62 },
+      { x: -180, z: 200, r: 90, y: 80 },
+      { x: 200, z: -120, r: 80, y: 75 },
+    ],
+    butterflyOk: (x, z) => Math.hypot(x, z) > CR.outer + 8,
+    wind: new THREE.Vector3(0.6, 0, -0.4),
+    seed: 21,
+  });
+  root.add(ambience.root);
   root.add(buildPier(m, colliders, PIER2, heightF2, { hut: true }));
 
   await step(0.62, '제2층 구조물 생성 중…');
@@ -612,6 +628,7 @@ export async function makeFloor2(world, game, progress) {
 
   await step(0.72, '고원의 숲을 가꾸는 중…');
   const veg = buildVegetation(m, tex, colliders, heightTex, game.quality, {
+    env: sky.environment,
     seed: 3030,
     height: heightF2,
     okSpot(x, z, clear = 5) {
@@ -637,7 +654,7 @@ export async function makeFloor2(world, game, progress) {
     bushes: 320,
     rocks: { n: 200, rmin: 125, rmax: 490 },
     edgeRocks: false,
-    grassTips: [[0.22, 0.34, 0.08], [0.38, 0.4, 0.12]],
+    grassTips: [[0.17, 0.26, 0.07], [0.31, 0.32, 0.1]],
   });
   veg.addTownTrees(town.treeSpots);
   veg.finalize();
@@ -905,6 +922,8 @@ export async function makeFloor2(world, game, progress) {
       lakeMat.uniforms.time.value = t;
       fall.uniforms.time.value = t;
       veg.update(t, center);
+      castle.group.userData.update?.(t);
+      ambience.update(dt, t, center);
       glows.update(t);
       for (const f of flowers) {
         if (f.taken) {

@@ -138,6 +138,47 @@ const ease = (k) => 1 - Math.pow(1 - THREE.MathUtils.clamp(k, 0, 1), 2.4);
 const REST_ARM = -0.35;
 
 // ---------------------------------------------------------------- system
+// Shared creature material: fine fur/hide noise in object space and a soft
+// rim light so silhouettes read against grass and sky.
+let FUR = null;
+function furMaterial() {
+  if (FUR) return FUR;
+  FUR = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+  FUR.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vObjP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvObjP = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying vec3 vObjP;
+float fh(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float fn(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(fh(i), fh(i + vec3(1,0,0)), f.x), mix(fh(i + vec3(0,1,0)), fh(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(fh(i + vec3(0,0,1)), fh(i + vec3(1,0,1)), f.x), mix(fh(i + vec3(0,1,1)), fh(i + vec3(1,1,1)), f.x), f.y), f.z); }`
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+  {
+    // streaky fur: stretched along the body (z) plus fine grain
+    float f1 = fn(vObjP * vec3(34.0, 34.0, 9.0));
+    float f2 = fn(vObjP * 90.0);
+    diffuseColor.rgb *= 0.7 + 0.45 * f1 + 0.16 * (f2 - 0.5);
+  }`
+      )
+      .replace(
+        '#include <lights_fragment_end>',
+        `#include <lights_fragment_end>
+  { float rim = pow(1.0 - max(dot(normal, normalize(vViewPosition)), 0.0), 2.5);
+    reflectedLight.indirectDiffuse += mix(diffuseColor.rgb, vec3(1.0, 0.9, 0.75), 0.25) * rim * 0.28; }`
+      );
+  };
+  FUR.customProgramCacheKey = () => 'creature-fur';
+  return FUR;
+}
+
 export class Monsters {
   /**
    * cfg: { height(x,z), colliders?, keepOut?(pos, r), spawns: [{ type, x, z, dormant?, noRespawn? }], seed? }
@@ -150,7 +191,7 @@ export class Monsters {
     this.cfg = cfg;
     this.h = cfg.height;
     this.list = [];
-    this.mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+    this.mat = furMaterial();
     // count instances per rig
     const counts = {};
     for (const s of cfg.spawns) {

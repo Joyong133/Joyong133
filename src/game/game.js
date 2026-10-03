@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { buildWorld } from '../world/world.js';
 import { setActiveHeight, TOWER } from '../world/layout.js';
 import { GlowField } from '../world/glow.js';
+import { setFoliageSun } from '../world/foliage.js';
 import { makeFloor1 } from '../maps/floor1.js';
 import { makeLabyrinth, LAB } from '../maps/labyrinth.js';
 import { makeFloor2, F2_GATES, F2_ARRIVE } from '../maps/floor2.js';
@@ -25,6 +26,7 @@ import { Fishing } from './fishing.js';
 import { Training } from './training.js';
 import { Tag } from './tag.js';
 import { talk } from './talk.js';
+import { makeGlove } from './hands.js';
 
 const QUALITY = {
   low: { pixelRatio: 1, xrScale: 0.85, foveation: 1, shadows: false },
@@ -41,29 +43,6 @@ function loadSave() {
   }
 }
 
-function makeGlove(side) {
-  const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x2a2320, roughness: 0.7 });
-  const metal = new THREE.MeshStandardMaterial({ color: 0x9aa0aa, metalness: 0.9, roughness: 0.3 });
-  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.035, 0.095), mat);
-  palm.position.set(0, -0.015, 0.03);
-  g.add(palm);
-  const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.036, 0.05, 10), metal);
-  cuff.rotation.x = Math.PI / 2;
-  cuff.position.set(0, -0.012, 0.095);
-  g.add(cuff);
-  for (let i = 0; i < 4; i++) {
-    const f = new THREE.Mesh(new THREE.CapsuleGeometry(0.011, 0.045, 3, 6), mat);
-    f.rotation.x = Math.PI / 2 - 0.5;
-    f.position.set(-0.03 + i * 0.02, -0.03, -0.035);
-    g.add(f);
-  }
-  const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.04, 3, 6), mat);
-  thumb.rotation.set(0.4, 0, side === 'left' ? -0.9 : 0.9);
-  thumb.position.set(side === 'left' ? 0.05 : -0.05, -0.005, 0.0);
-  g.add(thumb);
-  return g;
-}
 
 const GATE_DEFS = () => [
   { id: 'f1town', map: 'f1', label: '시작의 마을', floor: '제1층', pos: new THREE.Vector3(0, 0, 5), yaw: Math.PI },
@@ -242,6 +221,7 @@ export class Game {
     this.scene.fog.color.copy(env.fog.color);
     this.scene.fog.density = env.fog.density;
     const s = env.sun;
+    setFoliageSun(s.dir);
     w.sun.color.copy(s.color);
     w.sun.intensity = s.intensity;
     w.sun.target.position.copy(s.center);
@@ -741,6 +721,12 @@ export class Game {
     }
     this.vignette.enabled = vr && this.settings.vignette;
     this.vignette.update(dt, vr ? p.moveAmount * 0.9 : 0);
+    if (vr) {
+      // sword hand stays clenched; the free hand follows trigger / grip
+      const offH = input.hands[off];
+      this.gloves[main].userData.curl(0.9, 1.0, 0.95);
+      this.gloves[off].userData.curl(offH.values[BTN.trigger] || 0, offH.values[BTN.grip] || 0, offH.buttons[BTN.a] || offH.buttons[BTN.b] ? 1 : 0.35);
+    }
 
     // --- buttons
     const menuBtn = vr ? input.pressed(off, BTN.b) || input.pressed(main, BTN.b) : input.keyPressed('Tab') || input.keyPressed('KeyM');

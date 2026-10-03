@@ -2,7 +2,9 @@
 // field that follows the player and reads terrain height from a texture.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { RNG, fbm, vnoise } from '../core/noise.js';
+import { RNG, fbm } from '../core/noise.js';
+import { fieldAt } from './farmLayout.js';
+import { foliageAtlas, barkTexture, foliageMaterial, barkMaterial, broadleafTree, pineTree, bushGeometry, Impostors, windUniform } from './foliage.js';
 import { heightF1, roadDistance, LAKE, OUTPOST, BOSS_ARENA, OVERLOOK, TOWER, WORLD_R, TOWN } from './layout.js';
 
 // Floor-1 scattering rules. Other floors pass their own config.
@@ -16,6 +18,7 @@ export const VEG_F1 = {
     if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 4) return false;
     for (const [p, rr] of [[OUTPOST, 26], [BOSS_ARENA, 40], [OVERLOOK, 30]]) if (Math.hypot(x - p.x, z - p.z) < rr) return false;
     if (Math.hypot(x - TOWER.x, z - TOWER.z) < TOWER.r + 14) return false;
+    if (fieldAt(x, z, 6)) return false;
     return true;
   },
   forests: [
@@ -34,8 +37,6 @@ export const VEG_F1 = {
   edgeRocks: true,
 };
 
-const windUniform = { value: 0 };
-
 function colorize(g, fn) {
   const p = g.attributes.position;
   const c = new Float32Array(p.count * 3);
@@ -45,18 +46,6 @@ function colorize(g, fn) {
     c[i * 3] = tmp.r; c[i * 3 + 1] = tmp.g; c[i * 3 + 2] = tmp.b;
   }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
-  return g;
-}
-
-function blob(detail, seed, r, sx = 1, sy = 1, sz = 1) {
-  const g = new THREE.IcosahedronGeometry(r, detail);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const n = vnoise(x * 1.7 + seed, y * 1.7 + z * 1.3, seed) * 0.35 + 0.82;
-    p.setXYZ(i, x * n * sx, y * n * sy, z * n * sz);
-  }
-  g.computeVertexNormals();
   return g;
 }
 
@@ -70,90 +59,39 @@ function strip(g) {
   return out.index ? out.toNonIndexed() : out;
 }
 
-function oakGeometry(seed) {
-  const rng = new RNG(seed);
-  const parts = [];
-  const trunk = new THREE.CylinderGeometry(0.22, 0.38, 4.2, 7, 3);
-  trunk.translate(0, 2.1, 0);
-  // gentle bend
-  const tp = trunk.attributes.position;
-  for (let i = 0; i < tp.count; i++) tp.setX(i, tp.getX(i) + Math.sin(tp.getY(i) * 0.6 + seed) * 0.12);
-  trunk.computeVertexNormals();
-  const trunkParts = [trunk];
-  for (let k = 0; k < 3; k++) {
-    const br = new THREE.CylinderGeometry(0.08, 0.16, 2.2, 5);
-    br.translate(0, 1.1, 0);
-    br.rotateZ(rng.range(0.5, 0.9));
-    br.rotateY((k / 3) * Math.PI * 2 + rng.range(0, 1));
-    br.translate(0, 3.0 + k * 0.3, 0);
-    trunkParts.push(br);
-  }
-  const trunkG = mergeGeometries(trunkParts.map(strip));
-  colorize(trunkG, (x, y, z, c) => c.setRGB(0.28, 0.2, 0.14).multiplyScalar(0.6 + Math.min(1, y / 4) * 0.5));
-
-  const leaves = [];
-  const n = 7;
-  for (let k = 0; k < n; k++) {
-    const a = (k / n) * Math.PI * 2 + rng.range(0, 0.6);
-    const rr = k === 0 ? 0 : rng.range(1.3, 2.2);
-    const s = rng.range(1.4, 2.0);
-    const g = blob(1, seed * 7 + k, 1, 1, 0.8, 1);
-    g.scale(s, s, s);
-    g.translate(Math.sin(a) * rr, 5.3 + rng.range(-0.5, 1.2) + (k === 0 ? 1.2 : 0), Math.cos(a) * rr);
-    leaves.push(g);
-  }
-  const leafG = mergeGeometries(leaves.map(strip));
-  const hueShift = rng.range(-0.04, 0.04);
-  colorize(leafG, (x, y, z, c) => {
-    const t = THREE.MathUtils.clamp((y - 3.8) / 4.2, 0, 1);
-    const out = Math.min(1, Math.hypot(x, z) / 3);
-    const v = 0.45 + 0.55 * t * (0.6 + 0.4 * out);
-    c.setRGB((0.16 + hueShift) * v, 0.3 * v, 0.07 * v);
-  });
-  return { trunk: trunkG, leaves: leafG };
+// Shared foliage assets (built once, reused by every floor).
+let SHARED = null;
+let RENDERER = null;
+let ENV = null;
+export function setVegetationRenderer(renderer, env) {
+  RENDERER = renderer;
+  ENV = env;
 }
-
-function pineGeometry(seed) {
-  const rng = new RNG(seed);
-  const trunk = new THREE.CylinderGeometry(0.14, 0.3, 3, 6);
-  trunk.translate(0, 1.5, 0);
-  const trunkG = strip(trunk);
-  colorize(trunkG, (x, y, z, c) => c.setRGB(0.25, 0.17, 0.12).multiplyScalar(0.6 + y * 0.12));
-  const cones = [];
-  const tiers = 5;
-  for (let k = 0; k < tiers; k++) {
-    const r = 2.6 - k * 0.45;
-    const h = 2.8 - k * 0.2;
-    const g = new THREE.ConeGeometry(r, h, 9, 2);
-    const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const y = p.getY(i);
-      if (y < -h / 2 + 0.01) {
-        const a = Math.atan2(p.getX(i), p.getZ(i));
-        const j = 1 + (Math.sin(a * 9 + seed) * 0.12 + rng.range(-0.08, 0.08));
-        p.setXYZ(i, p.getX(i) * j, y - Math.abs(Math.sin(a * 4.5 + k)) * 0.35, p.getZ(i) * j);
-      }
-    }
-    g.computeVertexNormals();
-    g.translate(0, 2.4 + k * 1.35 + h / 2, 0);
-    cones.push(g);
-  }
-  const leafG = mergeGeometries(cones.map(strip));
-  colorize(leafG, (x, y, z, c) => {
-    const out = Math.min(1, Math.hypot(x, z) / 2.2);
-    const v = 0.4 + 0.6 * out * (0.7 + Math.min(1, y / 10) * 0.3);
-    c.setRGB(0.07 * v, 0.2 * v, 0.1 * v);
-  });
-  return { trunk: trunkG, leaves: leafG };
+export function sharedFoliage() {
+  return shared();
 }
-
-function bushGeometry(seed) {
-  const g = strip(blob(1, seed, 1, 1.2, 0.75, 1.2));
-  colorize(g, (x, y, z, c) => {
-    const v = 0.5 + 0.5 * THREE.MathUtils.clamp((y + 0.6) / 1.3, 0, 1);
-    c.setRGB(0.15 * v, 0.29 * v, 0.08 * v);
-  });
-  return g;
+function shared() {
+  if (SHARED) return SHARED;
+  const atlas = foliageAtlas();
+  const bark = barkTexture();
+  const leafMat = foliageMaterial(atlas, { wind: 0.045, flutter: 0.06, start: 2.2 });
+  leafMat.customProgramCacheKey = () => 'foliage-leaf';
+  const pineMat = foliageMaterial(atlas, { wind: 0.025, flutter: 0.03, start: 2.0, translucency: 0.35 });
+  pineMat.customProgramCacheKey = () => 'foliage-pine';
+  const bushMat = foliageMaterial(atlas, { wind: 0.0, flutter: 0.04, start: 0.1 });
+  bushMat.customProgramCacheKey = () => 'foliage-bush';
+  const barkMat = barkMaterial(bark);
+  barkMat.customProgramCacheKey = () => 'foliage-bark';
+  const species = [
+    broadleafTree(3, { height: 4.0, crownR: 3.1, hue: 0 }),
+    broadleafTree(11, { height: 4.6, crownR: 2.8, hue: 0.03 }),
+    pineTree(5, { height: 11.5 }),
+  ];
+  const bush = bushGeometry(9);
+  const vineMat = foliageMaterial(atlas, { wind: 0, flutter: 0, start: 0, translucency: 0.25 });
+  vineMat.customProgramCacheKey = () => 'foliage-vine';
+  SHARED = { atlas, bark, leafMat, pineMat, bushMat, barkMat, vineMat, species, bush };
+  return SHARED;
 }
 
 function rockGeometry(seed) {
@@ -173,63 +111,6 @@ function rockGeometry(seed) {
   return out;
 }
 
-function addWind(material, amount = 0.06, start = 3.5) {
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.windTime = windUniform;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float windTime;')
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-#ifdef USE_INSTANCING
-  float wph = instanceMatrix[3].x * 0.21 + instanceMatrix[3].z * 0.17;
-#else
-  float wph = 0.0;
-#endif
-  float wk = max(0.0, transformed.y - ${start.toFixed(2)});
-  transformed.x += sin(windTime * 1.3 + wph) * ${amount.toFixed(3)} * wk;
-  transformed.z += sin(windTime * 1.7 + wph * 1.3) * ${(amount * 0.6).toFixed(3)} * wk;`
-      );
-  };
-  // constants are baked into the source: keep leaf and pine programs apart
-  material.customProgramCacheKey = () => `wind-${amount}-${start}`;
-}
-
-function oakLowGeometry(seed) {
-  const rng = new RNG(seed + 100);
-  const trunk = strip(new THREE.CylinderGeometry(0.22, 0.38, 4.4, 5, 1, true).translate(0, 2.2, 0));
-  colorize(trunk, (x, y, z, c) => c.setRGB(0.2, 0.14, 0.1));
-  const parts = [trunk];
-  for (let k = 0; k < 3; k++) {
-    const a = (k / 3) * Math.PI * 2;
-    const g = strip(blob(0, seed * 3 + k, 1, 1, 0.8, 1));
-    g.scale(2.1, 2.1, 2.1);
-    g.translate(Math.sin(a) * 1.2, 5.6 + (k === 0 ? 0.8 : 0), Math.cos(a) * 1.2);
-    colorize(g, (x, y, z, c) => {
-      const v = 0.5 + 0.5 * THREE.MathUtils.clamp((y - 3.8) / 4.2, 0, 1);
-      c.setRGB(0.15 * v, 0.29 * v, 0.07 * v);
-    });
-    parts.push(g);
-  }
-  void rng;
-  return mergeGeometries(parts);
-}
-
-function pineLowGeometry() {
-  const trunk = strip(new THREE.CylinderGeometry(0.14, 0.3, 3, 5, 1, true).translate(0, 1.5, 0));
-  colorize(trunk, (x, y, z, c) => c.setRGB(0.2, 0.14, 0.1));
-  const parts = [trunk];
-  for (let k = 0; k < 3; k++) {
-    const g = strip(new THREE.ConeGeometry(2.5 - k * 0.7, 3.6 - k * 0.4, 6, 1).translate(0, 3.2 + k * 2.2, 0));
-    colorize(g, (x, y, z, c) => {
-      const v = 0.45 + 0.55 * Math.min(1, Math.hypot(x, z) / 2);
-      c.setRGB(0.07 * v, 0.2 * v, 0.1 * v);
-    });
-    parts.push(g);
-  }
-  return mergeGeometries(parts);
-}
-
 function matrixFor(t) {
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(t.tilt || 0, t.rot || 0, t.tilt2 || 0));
@@ -237,40 +118,37 @@ function matrixFor(t) {
   return m.elements;
 }
 
-// Distance-based LOD for instanced vegetation: near instances go to the
-// detailed meshes, the rest to a cheap merged mesh.
-class LodSet {
-  constructor(list, hi, lo, dist) {
-    this.list = list.map((t) => ({ x: t.x, z: t.z, m: matrixFor(t) }));
-    this.hi = hi.map(([g, mat, shadow]) => this._mesh(g, mat, shadow));
-    this.lo = this._mesh(lo[0], lo[1], false);
+// Near trees are full leaf-card meshes; far ones become impostor billboards
+// (or vanish, for bushes).
+class TreeSet {
+  constructor(list, hi, dist, cell = -1, farDist = Infinity) {
+    this.list = list.map((t) => ({ x: t.x, y: t.y, z: t.z, s: t.s, m: matrixFor(t), shade: 0.85 + ((t.x * 13.7 + t.z * 7.3) % 1 + 1) % 1 * 0.25 }));
+    this.hi = hi.map(([g, mat, shadow]) => {
+      const m = new THREE.InstancedMesh(g, mat, Math.max(1, this.list.length));
+      m.castShadow = !!shadow;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      m.count = 0;
+      return m;
+    });
     this.d2 = dist * dist;
-    this.meshes = [...this.hi, this.lo];
-    this.update(new THREE.Vector3(0, 0, 0));
+    this.far2 = farDist * farDist;
+    this.cell = cell;
+    this.meshes = this.hi;
   }
-  _mesh(g, mat, shadow) {
-    const m = new THREE.InstancedMesh(g, mat, Math.max(1, this.list.length));
-    m.castShadow = !!shadow;
-    m.receiveShadow = true;
-    m.frustumCulled = false;
-    m.count = 0;
-    return m;
-  }
-  update(c) {
-    let h = 0, l = 0;
+  update(c, imp) {
+    let h = 0;
     for (const t of this.list) {
       const dx = t.x - c.x, dz = t.z - c.z;
-      if (dx * dx + dz * dz < this.d2) {
+      const d2 = dx * dx + dz * dz;
+      if (d2 < this.d2) {
         for (const m of this.hi) m.instanceMatrix.array.set(t.m, h * 16);
         h++;
-      } else {
-        this.lo.instanceMatrix.array.set(t.m, l * 16);
-        l++;
+      } else if (this.cell >= 0 && imp && d2 < this.far2) {
+        imp.push(t.x, t.y, t.z, t.s, this.cell, t.shade);
       }
     }
     for (const m of this.hi) { m.count = h; m.instanceMatrix.needsUpdate = true; }
-    this.lo.count = l;
-    this.lo.instanceMatrix.needsUpdate = true;
   }
 }
 
@@ -296,8 +174,8 @@ function makeInstanced(geo, material, list, castShadow = false) {
 }
 
 // ----------------------------------------------------------------- GPU grass
-function buildGrass(heightTex, quality, tips = [[0.2, 0.36, 0.08], [0.36, 0.42, 0.13]]) {
-  const cfg = { low: [0.6, 14], medium: [0.5, 22], high: [0.42, 28] }[quality] || [0.5, 22];
+function buildGrass(heightTex, quality, tips = [[0.15, 0.28, 0.06], [0.27, 0.33, 0.1]]) {
+  const cfg = { low: [0.6, 14], medium: [0.5, 22], high: [0.42, 26] }[quality] || [0.5, 22];
   const [cell, radius] = cfg;
   const N = Math.ceil((radius * 2) / cell);
   // one tuft = 3 blades of 2 segments
@@ -306,7 +184,7 @@ function buildGrass(heightTex, quality, tips = [[0.2, 0.36, 0.08], [0.36, 0.42, 
   const BL = 4;
   for (let b = 0; b < BL; b++) {
     const a = (b / BL) * Math.PI + 0.3;
-    const dx = Math.cos(a) * 0.034, dz = Math.sin(a) * 0.034;
+    const dx = Math.cos(a) * 0.026, dz = Math.sin(a) * 0.026;
     const k = b - (BL - 1) / 2;
     const ox = Math.cos(a + 1.3) * 0.07 * k, oz = Math.sin(a + 1.3) * 0.07 * k;
     const lean = k * 0.1;
@@ -369,7 +247,7 @@ function buildGrass(heightTex, quality, tips = [[0.2, 0.36, 0.08], [0.36, 0.42, 
         float fade = 1.0 - smoothstep(radius * 0.65, radius, dist);
         float alive = step(r3, hm.g) * fade;
         bool flower = r4 < 0.035;
-        float h = (0.18 + 0.3 * r1) * (0.6 + 0.55 * hm.g) * alive * (flower ? 0.85 : 1.0);
+        float h = (0.2 + 0.34 * r1) * (0.6 + 0.55 * hm.g) * alive * (flower ? 0.85 : 1.0);
         float ang = r2 * 6.2832;
         float ca = cos(ang), sa = sin(ang);
         vec3 p = position;
@@ -397,10 +275,10 @@ function buildGrass(heightTex, quality, tips = [[0.2, 0.36, 0.08], [0.36, 0.42, 
       varying vec3 vTip;
       varying float vShade;
       void main() {
-        vec3 baseC = vec3(0.04, 0.075, 0.02);
+        vec3 baseC = vec3(0.025, 0.05, 0.015);
         vec3 c = mix(baseC, vTip, smoothstep(0.0, 1.0, vH)) * vShade;
         // warm sun + sky light approximation
-        c *= vec3(1.15, 1.08, 0.95);
+        c *= vec3(0.98, 0.97, 0.88);
         gl_FragColor = vec4(c, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -422,20 +300,8 @@ export function buildVegetation(m, tex, colliders, heightTex, quality, cfg = VEG
   const rng = new RNG(cfg.seed);
   const heightAt = cfg.height;
 
-  const barkMat = new THREE.MeshStandardMaterial({ map: tex.rock.map, normalMap: tex.rock.normal, vertexColors: true, roughness: 0.95 });
-  const leafMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
-  const pineMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
-  addWind(leafMat, 0.05, 3.5);
-  addWind(pineMat, 0.03, 3);
+  const F = shared();
   const rockMat = m.rock;
-
-  const oaks = [oakGeometry(3), oakGeometry(11)];
-  const pine = pineGeometry(5);
-  const bush = bushGeometry(9);
-  const oakLow = [oakLowGeometry(3), oakLowGeometry(11)];
-  const pineLow = pineLowGeometry();
-  const bushLow = strip(blob(0, 9, 1, 1.2, 0.75, 1.2));
-  colorize(bushLow, (x, y, z, c) => c.setRGB(0.12, 0.24, 0.07));
   const rock = rockGeometry(13);
 
   const oakLists = [[], []];
@@ -449,7 +315,7 @@ export function buildVegetation(m, tex, colliders, heightTex, quality, cfg = VEG
     const y = heightAt(x, z);
     const s = rng.range(0.8, 1.35);
     const t = { x, y: y - 0.2, z, s, rot: rng.range(0, Math.PI * 2) };
-    if (rng.chance(pineProb)) pineList.push({ ...t, s: s * 1.15 });
+    if (rng.chance(pineProb)) pineList.push({ ...t, s: s * 1.0 });
     else oakLists[rng.int(0, 1)].push(t);
     colliders.addCircle(x, z, 0.45 * s);
   };
@@ -544,17 +410,30 @@ export function buildVegetation(m, tex, colliders, heightTex, quality, cfg = VEG
     finalize() {
       oakLists[0].push(...townTrees.slice(0, Math.ceil(townTrees.length / 2)));
       oakLists[1].push(...townTrees.slice(Math.ceil(townTrees.length / 2)));
+      const near = { low: 55, medium: 75, high: 95 }[quality] || 75;
+      const imp = new Impostors(cfg.renderer || RENDERER, F.species.map((sp, i) => ({
+        meshes: [[sp.trunk, F.barkMat], [sp.leaves, i === 2 ? F.pineMat : F.leafMat]],
+        bounds: sp.bounds,
+      })), cfg.env || ENV);
+      this.impostors = imp;
       this.lods = [];
-      oaks.forEach((o, i) => {
-        this.lods.push(new LodSet(oakLists[i], [[o.trunk, barkMat, true], [o.leaves, leafMat, true]], [oakLow[i], leafMat], 70));
+      F.species.slice(0, 2).forEach((sp, i) => {
+        this.lods.push(new TreeSet(oakLists[i], [[sp.trunk, F.barkMat, true], [sp.leaves, F.leafMat, true]], near, i));
       });
-      this.lods.push(new LodSet(pineList, [[pine.trunk, barkMat, false], [pine.leaves, pineMat, false]], [pineLow, pineMat], 60));
-      this.lods.push(new LodSet(bushList, [[bush, leafMat, false]], [bushLow, leafMat], 45));
+      const ps = F.species[2];
+      this.lods.push(new TreeSet(pineList, [[ps.trunk, F.barkMat, true], [ps.leaves, F.pineMat, true]], near, 2));
+      this.lods.push(new TreeSet(bushList, [[F.bush, F.bushMat, false]], near * 0.6));
       for (const l of this.lods) group.add(...l.meshes);
+      group.add(imp.mesh);
       group.add(makeInstanced(rock, rockMat, rockList));
       this.counts = { oak: oakLists[0].length + oakLists[1].length, pine: pineList.length, bush: bushList.length, rock: rockList.length };
-      this._lodTimer = 0;
       this._lodPos = new THREE.Vector3(1e9, 0, 0);
+      this.refreshLods(new THREE.Vector3(0, 0, 0));
+    },
+    refreshLods(center) {
+      this.impostors.begin();
+      for (const l of this.lods) l.update(center, this.impostors);
+      this.impostors.end();
     },
     grass: buildGrass(heightTex, quality, cfg.grassTips),
     update(t, center) {
@@ -562,9 +441,9 @@ export function buildVegetation(m, tex, colliders, heightTex, quality, cfg = VEG
       this.grass.material.uniforms.time.value = t;
       if (center) {
         this.grass.material.uniforms.center.value.copy(center);
-        if (this.lods && this._lodPos.distanceToSquared(center) > 16) {
+        if (this.lods && this._lodPos.distanceToSquared(center) > 9) {
           this._lodPos.copy(center);
-          for (const l of this.lods) l.update(center);
+          this.refreshLods(center);
         }
       }
     },

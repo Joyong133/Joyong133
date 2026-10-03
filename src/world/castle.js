@@ -3,7 +3,8 @@
 // tower that climbs from the fields all the way to the ceiling.
 import * as THREE from 'three';
 import { GeoBuilder, mat4, boxGeo, scaleUV, spireGeo } from '../core/geo.js';
-import { fbm, ridged, RNG, smoothstep } from '../core/noise.js';
+import { fbm, ridged, RNG, smoothstep, lerp } from '../core/noise.js';
+import { sharedFoliage } from './vegetation.js';
 import { CEILING_Y, TOWER, WORLD_R, heightF1 } from './layout.js';
 
 const CEIL_R = 540;
@@ -14,9 +15,20 @@ const F1 = { height: heightF1, tower: TOWER, seeds: [501, 503], rng: 99, overloo
 function buildCeiling(m, cfg) {
   const [S1, S2] = cfg.seeds;
   const radii = [];
-  for (let r = 0; r <= CEIL_R; r += r < 300 ? 22 : 14) radii.push(r);
+  for (let r = 0; r <= CEIL_R; r += r < 300 ? 18 : 11) radii.push(r);
   if (radii[radii.length - 1] !== CEIL_R) radii.push(CEIL_R);
-  const SEG = 128;
+  const SEG = 160;
+  // earthy strata, darker creases, moss creeping in near the rim
+  const earth = (x, z, r, d, out) => {
+    const n1 = fbm(x * 0.008, z * 0.008, 3, S1 + 7);
+    const rg = ridged(x * 0.012, z * 0.012, 4, S2);
+    const strata = 0.5 + 0.5 * Math.sin(d * 0.45 + n1 * 7);
+    let k = lerp(0.24, 0.5, strata * 0.55 + n1 * 0.45) * (0.55 + 0.45 * rg);
+    let cr = k * 1.15, cg = k * 0.84, cb = k * 0.6;
+    const moss = smoothstep(CEIL_R - 120, CEIL_R - 25, r) * (0.35 + 0.65 * fbm(x * 0.03, z * 0.03, 2, 9));
+    cr = lerp(cr, 0.16, moss); cg = lerp(cg, 0.25, moss); cb = lerp(cb, 0.1, moss);
+    out.push(cr, cg, cb);
+  };
   const verts = [], uvs = [], cols = [], idx = [];
   const disp = (x, z, r) => {
     const n = fbm(x * 0.004, z * 0.004, 5, S1);
@@ -35,8 +47,7 @@ function buildCeiling(m, cfg) {
       const d = disp(x, z, r);
       verts.push(x, CEILING_Y - d, z);
       uvs.push(x / 30, z / 30);
-      const k = 0.34 + 0.12 * fbm(x * 0.02, z * 0.02, 2, 505);
-      cols.push(k, k * 0.97, k * 0.93);
+      earth(x, z, r, d, cols);
     }
   }
   const rs = (ri) => 1 + (ri - 1) * SEG;
@@ -59,7 +70,9 @@ function buildCeiling(m, cfg) {
       const yy = y === null ? CEILING_Y - disp(Math.sin(a) * CEIL_R, Math.cos(a) * CEIL_R, CEIL_R) : y + (fbm(a * 20, y, 2, 7) - 0.5) * 8;
       verts.push(x, yy, z);
       uvs.push(s * 1.5, yy / 12);
-      cols.push(0.6, 0.58, 0.55);
+      // grassy lip of the upper floor, raw rock below it
+      if (y !== null && y > CEILING_Y + 25) cols.push(0.2, 0.3, 0.12);
+      else cols.push(0.42, 0.36, 0.3);
     }
   }
   for (let s = 0; s < SEG; s++) {
@@ -80,7 +93,7 @@ function buildCeiling(m, cfg) {
   mat.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <fog_fragment>',
-      'gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.42, 0.5, 0.66), 0.42);\n#include <fog_fragment>'
+      'gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.5, 0.5, 0.56), 0.2);\n#include <fog_fragment>'
     );
   };
   const mesh = new THREE.Mesh(g, mat);
@@ -101,29 +114,166 @@ export function buildCastle(m, tex, colliders, glows, cfg = F1) {
   const stone = new THREE.Color('#a9a6a0');
   const darkStone = new THREE.Color('#8b8a90');
 
-  // --- stalactites + glowing crystal clusters hanging from the ceiling
-  const stal = new THREE.ConeGeometry(1, 1, 7, 1);
-  stal.rotateX(Math.PI);
-  stal.translate(0, -0.5, 0);
-  scaleUV(stal, 3, 3);
+  // --- jagged stalactites, glowing crystal clusters and hanging vines
+  const ceilAt = (x, z) => CEILING_Y - (10 + fbm(x * 0.004, z * 0.004, 5, S1) * 38 + ridged(x * 0.012, z * 0.012, 4, S2) * 14);
+  const stalVariants = [0, 1, 2].map((v) => {
+    const g = new THREE.ConeGeometry(1, 1, 7, 4);
+    g.rotateX(Math.PI);
+    g.translate(0, -0.5, 0);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const a = Math.atan2(x, z);
+      const j = 1 + (fbm(a * 2 + v * 5, y * 3, 3, 40 + v) - 0.5) * 0.9;
+      p.setXYZ(i, x * j + Math.sin(y * 4 + v) * 0.08, y, z * j);
+    }
+    g.computeVertexNormals();
+    scaleUV(g, 3, 3);
+    return g;
+  });
   const crystal = new THREE.OctahedronGeometry(1, 0);
-  for (let i = 0; i < 160; i++) {
+  const vineCards = { pos: [], nor: [], uv: [], col: [] };
+  const vine = (x, z, len, w, yaw) => {
+    const y0 = ceilAt(x, z) + 2;
+    const ax = Math.cos(yaw) * w * 0.5, az = -Math.sin(yaw) * w * 0.5;
+    const quad = [
+      [x - ax, y0, z - az, 0.504, 0],
+      [x + ax, y0, z + az, 0.504, 1],
+      [x + ax * 0.5, y0 - len, z + az * 0.5, 0.996, 1],
+      [x - ax * 0.5, y0 - len, z - az * 0.5, 0.996, 0],
+    ];
+    for (const k of [0, 1, 2, 0, 2, 3]) {
+      const q = quad[k];
+      vineCards.pos.push(q[0], q[1], q[2]);
+      vineCards.uv.push(q[3], q[4]);
+      vineCards.nor.push(0, -0.8, 0.6);
+      const sh = k >= 2 ? 0.55 : 0.85;
+      vineCards.col.push(0.7 * sh, 0.85 * sh, 0.6 * sh);
+    }
+  };
+  for (let i = 0; i < 200; i++) {
     const a = rng.range(0, Math.PI * 2);
     const r = Math.sqrt(rng.next()) * (CEIL_R - 60);
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
-    const base = CEILING_Y - (10 + fbm(x * 0.004, z * 0.004, 5, S1) * 38 + ridged(x * 0.012, z * 0.012, 4, S2) * 14) + 6;
-    const len = rng.range(12, 42);
-    const w = rng.range(4, 10);
-    b.add('rock', stal, mat4(x, base, z, rng.range(0, 6), 0, 0, w, len, w), stone.clone().multiplyScalar(0.5), { ao: false });
-    if (rng.chance(0.3)) {
-      const cl = rng.int(2, 4);
+    const base = ceilAt(x, z) + 6;
+    const len = rng.range(10, 46);
+    const w = rng.range(3.5, 10);
+    const tint = new THREE.Color().setRGB(0.42, 0.36, 0.3).multiplyScalar(rng.range(0.6, 1.0));
+    b.add('rock', stalVariants[i % 3], mat4(x, base, z, rng.range(0, 6), 0, 0, w, len, w), tint, { ao: false });
+    // satellite spikes
+    if (rng.chance(0.5)) {
+      const s2 = rng.range(0.35, 0.6);
+      b.add('rock', stalVariants[(i + 1) % 3], mat4(x + rng.range(-w, w), base, z + rng.range(-w, w), rng.range(0, 6), 0, 0, w * s2, len * s2, w * s2), tint, { ao: false });
+    }
+    if (rng.chance(0.28)) {
+      const cl = rng.int(2, 5);
       for (let k = 0; k < cl; k++) {
-        const s = rng.range(1.2, 3);
-        b.add(cfg.crystal, crystal, mat4(x + rng.range(-3, 3), base - len * rng.range(0.4, 0.8), z + rng.range(-3, 3), rng.range(0, 3), rng.range(-0.4, 0.4), 0, s * 0.6, s * 2, s * 0.6), 0xffffff, { ao: false });
+        const s = rng.range(1.2, 3.2);
+        b.add(cfg.crystal, crystal, mat4(x + rng.range(-3, 3), base - len * rng.range(0.4, 0.85), z + rng.range(-3, 3), rng.range(0, 3), rng.range(-0.4, 0.4), 0, s * 0.6, s * 2, s * 0.6), 0xffffff, { ao: false });
       }
       glows.add(x, base - len * 0.6, z, 9, cfg.crystalGlow, 0.15, 900);
     }
   }
+  // vines: thick near the mossy rim, sparse elsewhere
+  for (let i = 0; i < 170; i++) {
+    const a = rng.range(0, Math.PI * 2);
+    const rim = rng.chance(0.75);
+    const r = rim ? rng.range(CEIL_R - 115, CEIL_R - 12) : Math.sqrt(rng.next()) * (CEIL_R - 140);
+    const x = Math.sin(a) * r, z = Math.cos(a) * r;
+    const len = rng.range(18, rim ? 70 : 40);
+    const w = rng.range(4, 9);
+    const yaw = rng.range(0, Math.PI);
+    vine(x, z, len, w, yaw);
+    vine(x, z, len * 0.85, w * 0.9, yaw + Math.PI / 2);
+  }
+  {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(vineCards.pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(vineCards.nor, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(vineCards.uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(vineCards.col, 3));
+    g.computeBoundingSphere();
+    const vines = new THREE.Mesh(g, sharedFoliage().vineMat);
+    vines.name = 'vines';
+    group.add(vines);
+  }
+
+  // --- waterfalls pouring off the rim of the floor above into the void
+  const fallMat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { time: { value: 0 } }]),
+    vertexShader: /* glsl */ `
+      #include <common>
+      #include <fog_pars_vertex>
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: /* glsl */ `
+      #include <common>
+      #include <fog_pars_fragment>
+      uniform float time;
+      varying vec2 vUv;
+      float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+      void main() {
+        float v = vUv.y;
+        float s1 = n(vec2(vUv.x * 24.0, v * 6.0 - time * 1.1));
+        float s2 = n(vec2(vUv.x * 70.0 + 3.0, v * 16.0 - time * 2.4));
+        float edge = smoothstep(0.0, 0.22, vUv.x) * smoothstep(1.0, 0.78, vUv.x);
+        float body = (0.3 + 0.5 * s1 + 0.25 * s2) * edge;
+        float top = smoothstep(0.0, 0.015, v);
+        float mist = 1.0 - smoothstep(0.45, 1.0, v);
+        float a = clamp(body * top * mist, 0.0, 1.0) * 0.8;
+        vec3 col = mix(vec3(0.72, 0.8, 0.9), vec3(1.0, 0.98, 0.95), s2);
+        gl_FragColor = vec4(col, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }`,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true,
+  });
+  const falls = [];
+  const fallAngles = cfg.falls ?? [0.39, 1.44, 2.5, 3.8, 4.85, 5.6];
+  for (const fa of fallAngles) {
+    const width = rng.range(16, 34);
+    const segs = 28;
+    const pos = [], uv = [], idx = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const r = CEIL_R + 3 + 16 * t + 34 * t * t;
+      const y = CEILING_Y + 28 - t * 540;
+      const w = width * (1 + 1.1 * t);
+      const cx = Math.sin(fa) * r, cz = Math.cos(fa) * r;
+      const tx = Math.cos(fa) * w * 0.5, tz = -Math.sin(fa) * w * 0.5;
+      pos.push(cx - tx, y, cz - tz, cx + tx, y, cz + tz);
+      uv.push(0, t, 1, t);
+      if (i < segs) {
+        const k = i * 2;
+        idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    g.computeBoundingSphere();
+    const mesh = new THREE.Mesh(g, fallMat);
+    mesh.renderOrder = 2;
+    mesh.name = 'waterfall';
+    group.add(mesh);
+    falls.push(mesh);
+    glows.add(Math.sin(fa) * (CEIL_R + 6), CEILING_Y + 22, Math.cos(fa) * (CEIL_R + 6), width * 0.7, 0xcfe6ff, 0.05, 2000);
+  }
+  group.userData.update = (t) => {
+    fallMat.uniforms.time.value = t;
+  };
 
   // --- great outer pillars that hold the floors together
   const PILLAR_R = WORLD_R + 22;

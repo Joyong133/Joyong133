@@ -2,6 +2,7 @@
 // splat shader that paints cobblestone / grass / dirt roads / rock per pixel.
 import * as THREE from 'three';
 import { heightF1, roadDistance, ROAD_SEGMENTS, WORLD_R, LAKE, TOWN } from './layout.js';
+import { FIELDS, fieldAt } from './farmLayout.js';
 
 // Floor-1 defaults; other floors pass their own height function, roads, lake…
 const F1 = {
@@ -10,7 +11,34 @@ const F1 = {
   lake: LAKE,
   cobbleR: 113.4,
   grassTint: [1, 1, 1],
+  fields: FIELDS,
 };
+
+// fields → shader uniforms (at least one entry; a far-away dummy if none)
+export function fieldUniforms(fields = []) {
+  const list = fields.length ? fields : [{ x: 1e5, z: 1e5, yaw: 0, hw: 1, hd: 1, crop: 0 }];
+  return {
+    A: list.map((f) => new THREE.Vector4(f.x, f.z, Math.cos(f.yaw), Math.sin(f.yaw))),
+    B: list.map((f) => new THREE.Vector4(f.hw, f.hd, f.crop, 0)),
+  };
+}
+export function fieldGLSL(n) {
+  return `
+uniform vec4 uFieldA[${n}];
+uniform vec4 uFieldB[${n}];
+// returns crop type in .x, inside-ness in .y, local coords in .zw
+vec4 fieldInfo(vec2 p) {
+  vec4 best = vec4(0.0);
+  for (int i = 0; i < ${n}; i++) {
+    vec2 d = p - uFieldA[i].xy;
+    vec2 l = vec2(d.x * uFieldA[i].z - d.y * uFieldA[i].w, d.x * uFieldA[i].w + d.y * uFieldA[i].z);
+    vec2 e = abs(l) - uFieldB[i].xy;
+    float inside = 1.0 - smoothstep(-0.4, 0.25, max(e.x, e.y));
+    if (inside > best.y) best = vec4(uFieldB[i].z, inside, l);
+  }
+  return best;
+}`;
+}
 import { fbm, smoothstep } from '../core/noise.js';
 
 function ringRadii() {
@@ -70,7 +98,10 @@ export function buildTerrain(tex, cfg = F1) {
   });
   const segs = cfg.segs.map((s) => new THREE.Vector4(s[0], s[1], s[2], s[3]));
   const lake = cfg.lake || { x: 1e5, z: 1e5, r: 1, level: 0 };
+  const fu = fieldUniforms(cfg.fields || []);
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uFieldA = { value: fu.A };
+    shader.uniforms.uFieldB = { value: fu.B };
     Object.assign(shader.uniforms, {
       tGrass: { value: tex.grass.map }, nGrass: { value: tex.grass.normal },
       tDirt: { value: tex.dirt.map }, nDirt: { value: tex.dirt.normal },
@@ -93,6 +124,7 @@ uniform sampler2D tGrass, nGrass, tDirt, nDirt, tCobble, nCobble, tRock, nRock;
 uniform vec4 uSegs[${segs.length}];
 uniform vec4 uLake;
 uniform vec3 uGrassTint;
+${fieldGLSL(fu.A.length)}
 vec4 splatW;
 float segDist(vec2 p, vec4 s) {
   vec2 a = s.xy, b = s.zw;
@@ -110,7 +142,7 @@ vec4 computeSplat() {
   float dirt = 1.0 - smoothstep(2.0, 3.8, rd + (n - 0.5) * 2.2);
   float lk = length(p - uLake.xy);
   dirt = max(dirt, 1.0 - smoothstep(uLake.z * 0.95, uLake.z * 1.12, lk + (n - 0.5) * 4.0));
-  float rock = smoothstep(0.17, 0.3, 1.0 - vTUp + (n - 0.5) * 0.1);
+  float rock = smoothstep(0.22, 0.38, 1.0 - vTUp + (n - 0.5) * 0.12);
   vec4 w = vec4(0.0);
   w.z = cob;
   float rest = 1.0 - cob;
@@ -130,9 +162,22 @@ vec4 computeSplat() {
   vec4 grass = mix(g1, g2, 0.35) * (0.85 + 0.35 * texture2D(tDirt, p / 61.0).r);
   grass.rgb *= uGrassTint;
   vec4 dirt = texture2D(tDirt, p / 4.0);
-  vec4 cob = texture2D(tCobble, p / 3.2);
-  vec4 rock = texture2D(tRock, vec2(p.x + vTW.y * 0.7, p.y - vTW.y * 0.7) / 7.0) * vec4(0.7, 0.66, 0.6, 1.0);
+  vec4 cob = texture2D(tCobble, p / 3.2) * vec4(1.1, 1.0, 0.86, 1.0);
+  vec4 rock = texture2D(tRock, vec2(p.x + vTW.y * 0.7, p.y - vTW.y * 0.7) / 7.0) * vec4(0.55, 0.5, 0.44, 1.0);
   diffuseColor.rgb *= (grass * splatW.x + dirt * splatW.y + cob * splatW.z + rock * splatW.w).rgb;
+  // farm fields: stubble under the wheat, crop rows, plowed furrows
+  vec4 fi = fieldInfo(p);
+  if (fi.y > 0.001) {
+    float row = fi.z / 0.85;
+    float furrow = 0.5 + 0.5 * sin(row * 6.2832);
+    vec3 soil = mix(vec3(0.16, 0.11, 0.07), vec3(0.27, 0.19, 0.12), furrow) * (0.85 + 0.3 * dirt.r);
+    vec3 fc;
+    if (fi.x < 1.5) fc = mix(vec3(0.34, 0.24, 0.08), vec3(0.56, 0.41, 0.14), furrow * 0.6 + 0.4 * grass.g);
+    else if (fi.x < 2.5) fc = mix(soil, vec3(0.13, 0.24, 0.06) * (0.8 + 0.4 * grass.g), smoothstep(0.55, 0.85, furrow));
+    else fc = soil;
+    diffuseColor.rgb = mix(diffuseColor.rgb, fc, fi.y);
+    splatW = mix(splatW, vec4(0.0, 1.0, 0.0, 0.0), fi.y);
+  }
 }`
       )
       .replace(
@@ -212,6 +257,7 @@ function densityF1(x, z) {
   if (r <= TOWN.safeR + 3 || r >= WORLD_R - 4) return 0;
   const rd = roadDistance(x, z);
   const lk = Math.hypot(x - LAKE.x, z - LAKE.z);
+  if (fieldAt(x, z, 1.5)) return 0;
   return smoothstep(3.2, 6, rd) * smoothstep(LAKE.r * 1.05, LAKE.r * 1.3, lk);
 }
 

@@ -6,6 +6,7 @@ import { pierSpec, pierHeight, pierPoint, buildPier } from './pier.js';
 import { heightF1, TOWN, LAKE, OUTPOST, BOSS_ARENA, TOWER, OVERLOOK, ROADS, WORLD_R, SUN_DIR } from '../world/layout.js';
 import { VEG_F1 } from '../world/vegetation.js';
 import { RNG } from '../core/noise.js';
+import { Ambience } from '../world/ambience.js';
 
 // a point beside a road: segment `seg` of road `ri`, fraction t, offset sideways
 export function besideRoad(roads, ri, seg, t, side = 1, off = 4.8) {
@@ -144,6 +145,20 @@ export function makeFloor1(world, game) {
   ];
   const { fx, fz } = PIER;
   const fisher = pierPoint(PIER, 3.5, 2.4);
+  const ambience = new Ambience({
+    quality: game.quality,
+    chimneys: world.town.chimneys,
+    height: walkF1,
+    birdAreas: [
+      { x: 0, z: 0, r: 70, y: 42 },
+      { x: 20, z: 210, r: 90, y: 34 },
+      { x: -230, z: 80, r: 60, y: 38 },
+      { x: 150, z: -160, r: 80, y: 46 },
+    ],
+    butterflyOk: (x, z) => Math.hypot(x, z) > TOWN.safeR + 6,
+    wind: new THREE.Vector3(SUN_DIR.x * -1, 0, SUN_DIR.z * -1),
+  });
+  world.root.add(ambience.root);
   return {
     id: 'f1',
     name: '부유성 제1층',
@@ -247,6 +262,7 @@ export function makeFloor1(world, game) {
     },
     update(dt, t, center) {
       world.update(dt, t, center);
+      ambience.update(dt, t, center);
     },
   };
 }
