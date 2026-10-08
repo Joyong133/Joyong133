@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         nihongo: resolve(__dirname, 'nihongo/index.html'),
+        runner: resolve(__dirname, 'runner/index.html'),
       },
     },
   },
