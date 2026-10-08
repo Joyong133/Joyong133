@@ -42,6 +42,10 @@ export class App {
     this.race = null;
     this.bindScreens();
     window.addEventListener('resize', () => this.resize());
+    // browsers only allow audio after a gesture; unlock on the first one
+    const unlock = () => this.audio.init();
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
     this.resize();
     this.last = performance.now();
     r.setAnimationLoop(() => this.loop());

@@ -145,6 +145,7 @@ export class Lobby {
       </section>
       <section class="lb-maps panel">
         <h2>맵 선택</h2>
+        <p class="map-desc"></p>
         <div class="map-list"></div>
       </section>
       <footer class="lb-bottom panel">
@@ -265,6 +266,7 @@ export class Lobby {
     });
     R.querySelector('[data-seg="diff"]').classList.toggle('dim', this.sel.mode === 'time');
     R.querySelectorAll('[data-opt]').forEach((b) => b.classList.toggle('off', !store.get(b.dataset.opt)));
+    R.querySelector('.map-desc').textContent = MAPS[this.sel.map].desc;
     const sel = R.querySelector('.map-card.on');
     sel?.scrollIntoView?.({ block: 'nearest' });
   }
