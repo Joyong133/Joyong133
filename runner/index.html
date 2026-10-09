@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#ff8fc8" />
+    <meta name="description" content="동화 속 세상을 달리는 3D 레이싱 게임. 8명의 캐릭터, 10개의 동화 맵, 스피드전·아이템전·타임어택." />
+    <title>동화나라 런너즈</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud" class="hidden"></div>
+
+    <div id="touch" class="hidden">
+      <div id="stick"><div class="knob"></div></div>
+      <div class="btns">
+        <button data-btn="item" class="tb item">아이템</button>
+        <button data-btn="boost" class="tb boost">부스터</button>
+        <button data-btn="jump" class="tb jump">점프</button>
+      </div>
+    </div>
+    <button id="pause-btn" class="hidden" aria-label="일시정지">II</button>
+
+    <div id="title" class="screen">
+      <div class="clouds"><i></i><i></i><i></i><i></i></div>
+      <div class="title-card">
+        <div class="kicker">FAIRYTALE RUNNERS</div>
+        <h1>동화나라 <span>런너즈</span></h1>
+        <p class="sub">동화 속 열 개의 세상을 달려라! 점프하고, 피하고, 먼저 골인!</p>
+        <button class="start">시작하기</button>
+        <div class="keys">
+          <div><kbd>↑↓←→</kbd> / <kbd>WASD</kbd> 달리기</div>
+          <div><kbd>Space</kbd> / <kbd>Ctrl</kbd> 점프 (공중에서 한 번 더!)</div>
+          <div><kbd>Shift</kbd> 부스터 · <kbd>Z</kbd> 아이템</div>
+          <div><kbd>R</kbd> 체크포인트로 · <kbd>Esc</kbd> 일시정지</div>
+        </div>
+        <div class="foot">테일즈런너에서 영감을 받은 비공식 팬 게임입니다. 캐릭터와 맵은 새로 만들었고, 모든 그래픽과 소리는 코드로 생성됩니다.</div>
+        <div class="foot"><a href="../">LINK START</a> · <a href="../nihongo/">日本語 VR</a></div>
+      </div>
+    </div>
+
+    <div id="lobby" class="screen hidden"></div>
+
+    <div id="pause" class="screen hidden">
+      <div class="card">
+        <h2>일시정지</h2>
+        <button data-act="resume" class="primary">계속하기</button>
+        <button data-act="retry">처음부터 다시</button>
+        <button data-act="lobby">로비로 나가기</button>
+      </div>
+    </div>
+
+    <div id="loading" class="screen hidden">
+      <div class="ld-card">
+        <div class="ld-sub"></div>
+        <div class="ld-name"></div>
+        <div class="ld-meta"></div>
+        <div class="ld-desc"></div>
+        <div class="ld-track"><div class="ld-fill"><img class="ld-runner" alt="" /></div></div>
+        <div class="ld-tip"></div>
+      </div>
+    </div>
+
+    <div id="results" class="screen hidden">
+      <div class="card">
+        <div class="res-title"></div>
+        <div class="res-sub"></div>
+        <table class="res-table"></table>
+        <div class="res-btns">
+          <button data-act="retry" class="primary">다시 달리기</button>
+          <button data-act="next">다음 맵</button>
+          <button data-act="lobby">로비로</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
