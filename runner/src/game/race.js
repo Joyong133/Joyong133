@@ -820,6 +820,15 @@ export class Race {
         this.fx.emit(r.pos.x + (Math.random() - 0.5) * 0.4, r.pos.y + 0.4, r.pos.z + (Math.random() - 0.5) * 0.4, -r.vel.x * 0.1, 0.6, -r.vel.z * 0.1, Math.random() < 0.5 ? 0xffb81a : 0xff5a14, 0.7, 0.3, 0, 2);
       }
       if (r.grounded && sp > 8 && Math.random() < dt * 8) this.fx.dust(r.pos.x, r.pos.y, r.pos.z, 1);
+      // footsteps, one per stride
+      if (r.isPlayer && r.grounded && sp > 1.5 && r.fallT <= 0) {
+        r.stride = (r.stride || 0) + sp * dt;
+        if (r.stride > 1.9) {
+          r.stride = 0;
+          const surf = r.ground?.surface;
+          this.app.audio.sfx(surf === 'ice' ? 'stepIce' : surf === 'sand' || surf === 'jelly' || surf === 'bouncy' ? 'stepSoft' : 'step', 0.8);
+        }
+      }
     }
     if (this.ghost) this.ghost.update(this.clock, dt, this.camera.position, this.state === 'intro' || this.state === 'countdown' ? 'idle' : 'run');
     // stars

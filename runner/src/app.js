@@ -145,6 +145,7 @@ export class App {
     document.getElementById('pause-btn').classList.add('hidden');
     this.lobby.show();
     this.audio.music('lobby');
+    this.audio.ambient(null);
   }
 
   disposeRace() {
@@ -229,6 +230,7 @@ export class App {
     document.getElementById('pause-btn').classList.remove('hidden');
     this.input.clear();
     this.audio.music(map.theme);
+    this.audio.ambient(map.theme);
   }
 
   togglePause() {
