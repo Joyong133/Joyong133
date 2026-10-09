@@ -215,7 +215,7 @@ export class Lobby {
     );
     R.querySelector('.go').addEventListener('click', () => {
       this.app.audio.sfx('select');
-      this.app.startRace({ mapIdx: this.sel.map, charId: this.sel.char, mode: this.sel.mode, diff: this.sel.diff });
+      this.app.launch({ mapIdx: this.sel.map, charId: this.sel.char, mode: this.sel.mode, diff: this.sel.diff });
     });
     // drag to spin the preview
     const cv = this.app.renderer.domElement;

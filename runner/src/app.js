@@ -8,12 +8,30 @@ import { Hud, fmtTime } from './ui/hud.js';
 import { Lobby } from './ui/lobby.js';
 import { Race } from './game/race.js';
 import { MAPS } from './data/maps.js';
+import { THEMES } from './data/themes.js';
 import { Bot } from './game/ai.js';
 import { rng } from './core/rng.js';
 import { Post } from './core/post.js';
 import { setMaxAnisotropy } from './world/textures.js';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+
+const MODE_NAMES = { speed: '스피드전', item: '아이템전', time: '타임어택' };
+const TIPS = [
+  '출발 신호 <b>GO!</b>에 맞춰 앞으로 달리면 스타트 대시!',
+  '공중에서 한 번 더 점프하면 앞구르기 2단 점프를 해요.',
+  '별을 모으면 부스터 게이지가 차요. 반 칸마다 <kbd>Shift</kbd>로 쭉!',
+  '길에서 떨어지면 마지막 체크포인트에서 다시 시작해요. <kbd>R</kbd>로 직접 돌아갈 수도 있어요.',
+  '요정 방패는 장애물과 공격을 딱 한 번 막아 줘요.',
+  '가짜 문은 꽝! 부딪쳐 보고 진짜 문을 찾아요.',
+  '움직이는 발판은 다가오는 순간을 노려서 뛰어요.',
+  '회전 막대는 점프로 넘거나 바깥쪽으로 피해요.',
+  '꿀단지는 뒤에 뿌려져요. 바짝 쫓아오는 친구에게 딱!',
+  '체크포인트를 지날 때마다 깃발이 반짝여요. 거기서 다시 시작해요.',
+  '마지막 바퀴에선 아이템을 아껴 두었다가 역전을 노려 봐요.',
+  '인어의 바닷속에선 몸이 가벼워서 둥실 높이 뛰어요.',
+  '빙판에선 미리 방향을 틀어야 미끄러지지 않아요.',
+];
 
 export class App {
   constructor() {
@@ -36,6 +54,7 @@ export class App {
       lobby: document.getElementById('lobby'),
       pause: document.getElementById('pause'),
       results: document.getElementById('results'),
+      loading: document.getElementById('loading'),
       touch: document.getElementById('touch'),
     };
     this.input.bindTouch(this.screens.touch);
@@ -72,8 +91,8 @@ export class App {
   act(a) {
     this.audio.sfx('click');
     if (a === 'resume') this.togglePause();
-    else if (a === 'retry') this.startRace(this.lastOpts);
-    else if (a === 'next') this.startRace({ ...this.lastOpts, mapIdx: (this.lastOpts.mapIdx + 1) % MAPS.length });
+    else if (a === 'retry') this.launch(this.lastOpts);
+    else if (a === 'next') this.launch({ ...this.lastOpts, mapIdx: (this.lastOpts.mapIdx + 1) % MAPS.length });
     else if (a === 'lobby') this.toLobby();
   }
 
@@ -133,6 +152,62 @@ export class App {
       this.race.dispose();
       this.race = null;
     }
+  }
+
+  // Title card while the course builds and its shaders compile, so the race
+  // opens on a smooth frame. startRace() itself stays synchronous for tests.
+  launch(opts) {
+    if (this.loading) return;
+    this.audio.init();
+    const L = this.screens.loading;
+    const map = MAPS[opts.mapIdx];
+    const th = THEMES[map.theme];
+    const css = (c) => `#${new THREE.Color(c).getHexString()}`;
+    L.style.setProperty('--ld-a', css(th.sky[0]));
+    L.style.setProperty('--ld-b', css(th.sky[2]));
+    L.style.setProperty('--ld-c', css(th.accent));
+    const q = (s) => L.querySelector(s);
+    q('.ld-sub').textContent = `${opts.mapIdx + 1}. ${map.sub}`;
+    q('.ld-name').textContent = map.name;
+    q('.ld-meta').innerHTML = `<span class="stars">${'★'.repeat(Math.ceil(map.level / 2))}${'☆'.repeat(4 - Math.ceil(map.level / 2))}</span> · ${map.laps}바퀴 · ${MODE_NAMES[opts.mode] || ''}`;
+    q('.ld-desc').textContent = map.desc;
+    q('.ld-tip').innerHTML = `<b>TIP</b> ${TIPS[Math.floor(Math.random() * TIPS.length)]}`;
+    const img = q('.ld-runner');
+    const pic = this.lobby?.portraits?.[opts.charId];
+    if (pic) img.src = pic;
+    img.style.display = pic ? '' : 'none';
+    const fill = q('.ld-fill');
+    fill.style.transition = 'none';
+    fill.style.width = '0%';
+    L.classList.remove('hidden', 'out');
+    void fill.offsetWidth;
+    fill.style.transition = 'width 1.2s cubic-bezier(0.2, 0.7, 0.3, 1)';
+    fill.style.width = '72%';
+    this.show(null);
+    this.loading = true;
+    const t0 = performance.now();
+    // two frames so the card paints before the heavy synchronous build
+    requestAnimationFrame(() =>
+      requestAnimationFrame(async () => {
+        this.startRace(opts);
+        try {
+          await this.renderer.compileAsync(this.race.scene, this.camera);
+        } catch {
+          /* precompile is only an optimisation */
+        }
+        const wait = Math.max(0, 1500 - (performance.now() - t0));
+        setTimeout(() => {
+          fill.style.transition = 'width 0.3s ease-out';
+          fill.style.width = '100%';
+        }, Math.max(0, wait - 350));
+        setTimeout(() => {
+          this.loading = false;
+          this.last = performance.now();
+          L.classList.add('out');
+          setTimeout(() => L.classList.add('hidden'), 450);
+        }, wait);
+      })
+    );
   }
 
   startRace(opts) {
@@ -197,6 +272,7 @@ export class App {
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
+    if (this.loading) return;
     if (this.screen === 'race' && this.race) {
       this.race.update(dt);
       const pd = this.race.podium;
