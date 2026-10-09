@@ -523,6 +523,16 @@ export class CharacterModel {
       legB = 0.2;
       headTilt = Math.sin(this.t * 5) * 0.15;
       face = ['happy', 'grin'];
+    } else if (mode === 'clap') {
+      // applause from the back row: arms forward, hands meeting in front
+      this.clapOff ??= Math.random() * 10;
+      const t = this.t + this.clapOff;
+      const c = 0.5 + 0.5 * Math.sin(t * 11);
+      armA = armB = -1.25 + Math.sin(t * 2.1) * 0.12;
+      armSpread = -0.22 + c * 0.5;
+      bob = Math.abs(Math.sin(t * 2.6)) * 0.05;
+      headTilt = Math.sin(t * 1.3) * 0.12;
+      face = ['happy', c > 0.6 ? 'grin' : 'smile'];
     } else if (st.frozen) {
       armA = armB = -0.4;
       armSpread = 0.5;

@@ -8,6 +8,7 @@ import { CHARACTERS, charById } from '../data/characters.js';
 import { Runner, GRAVITY } from './runner.js';
 import { Bot } from './ai.js';
 import { Fx } from './fx.js';
+import { Podium } from './podium.js';
 import { ItemSystem, rollItem } from './items.js';
 import { toon } from '../world/geom.js';
 import { toLocalX, toLocalZ } from '../world/physics.js';
@@ -276,6 +277,11 @@ export class Race {
     dt = Math.min(dt, 0.1);
     if (this.paused) {
       if (this.app.input.take('pause')) this.app.togglePause();
+      return;
+    }
+    if (this.podium) {
+      this.app.input.clear();
+      this.podium.update(dt);
       return;
     }
     this.readPlayerInput();
@@ -702,6 +708,11 @@ export class Race {
       best: r.lapTimes.length ? Math.min(...r.lapTimes) : null,
     }));
     const p = this.player;
+    // award ceremony replaces the track view
+    this.podium = new Podium(this);
+    this.app.hud.ceremony();
+    this.app.audio.sfx('cheer', 0.8);
+    this.app.audio.sfx('applause', 0.8);
     this.app.onRaceEnd({
       map: this.map,
       mode: this.mode,
@@ -884,7 +895,9 @@ export class Race {
   // Free this race's GPU resources. Shared (cached) textures/materials stay.
   dispose() {
     const mats = new Set();
-    this.scene.traverse((o) => {
+    const scenes = [this.scene];
+    if (this.podium) scenes.push(this.podium.scene);
+    for (const sc of scenes) sc.traverse((o) => {
       o.geometry?.dispose?.();
       if (o.isInstancedMesh) o.dispose();
       const m = o.material;

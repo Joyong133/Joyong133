@@ -206,6 +206,14 @@ export class GameAudio {
         this.noise(1.6, { freq: 1800, q: 0.4, vol: 0.12 * v, attack: 0.25 });
         this.noise(1.2, { freq: 900, q: 0.6, vol: 0.08 * v, attack: 0.3, when: 0.1 });
         break;
+      case 'pop':
+        // firework: soft thump, then a crackle tail
+        this.noise(0.35, { freq: 220, type: 'lowpass', vol: 0.22 * v });
+        for (let i = 0; i < 6; i++) this.noise(0.05, { freq: 3000 + Math.random() * 3000, q: 3, vol: 0.05 * v, when: 0.12 + Math.random() * 0.45 });
+        break;
+      case 'applause':
+        for (let i = 0; i < 46; i++) this.noise(0.05, { freq: 1300 + Math.random() * 1600, q: 1.2, vol: (0.03 + Math.random() * 0.03) * v, when: Math.random() * 2.6 * Math.sqrt(Math.random()) });
+        break;
       case 'checkpoint':
         this.tone(880, 0.16, { type: 'sine', vol: 0.15 * v });
         this.tone(1320, 0.3, { type: 'sine', vol: 0.15 * v, when: 0.1 });

@@ -110,6 +110,7 @@ export class App {
     this.camera.updateProjectionMatrix();
     this.lobby?.resize(w, h);
     this.race?.fx.setViewport(this.renderer.domElement.height);
+    this.race?.podium?.resize(w, h, this.renderer.getPixelRatio());
   }
 
   show(name) {
@@ -175,15 +176,16 @@ export class App {
     S.querySelector('.res-table').innerHTML = res.rows
       .map(
         (r, i) =>
-          `<tr class="${r.isPlayer ? 'me' : ''}"><td class="rk">${r.dnf ? '-' : i + 1}</td><td class="nm">${r.name}${r.isPlayer ? ' (나)' : ''}</td><td class="tt">${r.dnf ? (res.time === null && r.isPlayer ? '시간 초과' : '달리는 중') : fmtTime(r.time)}</td></tr>`
+          `<tr class="${r.isPlayer ? 'me' : ''}${r.dnf ? ' dnf' : ''}"><td class="rk">${i + 1}</td><td class="nm">${r.name}${r.isPlayer ? ' (나)' : ''}</td><td class="tt">${r.dnf ? (res.time === null && r.isPlayer ? '시간 초과' : '달리는 중') : fmtTime(r.time)}</td></tr>`
       )
       .join('');
-    S.querySelector('[data-act="next"]').textContent = `다음 맵: ${MAPS[(this.lastOpts.mapIdx + 1) % MAPS.length].name}`;
+    S.querySelector('[data-act="next"]').innerHTML = `다음 맵 ▶<small>${MAPS[(this.lastOpts.mapIdx + 1) % MAPS.length].name}</small>`;
     this.audio.sfx(res.time === null ? 'lose' : 'finish', 0.6);
     setTimeout(() => {
       if (this.race && this.race.state === 'end') this.show('results');
-    }, 400);
+    }, 900);
     this.screens.touch.classList.add('hidden');
+    document.getElementById('pause-btn').classList.add('hidden');
   }
 
   draw(scene, cam, dt) {
@@ -197,7 +199,9 @@ export class App {
     this.last = now;
     if (this.screen === 'race' && this.race) {
       this.race.update(dt);
-      this.draw(this.race.scene, this.camera, dt);
+      const pd = this.race.podium;
+      if (pd) this.draw(pd.scene, pd.cam, dt);
+      else this.draw(this.race.scene, this.camera, dt);
     } else {
       this.lobby.update(dt);
       this.draw(this.lobby.scene, this.lobby.cam, dt);

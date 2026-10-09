@@ -83,7 +83,7 @@ export class Hud {
   setup(race) {
     const el = this.el;
     this.race = race;
-    this.root.classList.remove('hidden');
+    this.root.classList.remove('hidden', 'ceremony');
     this.root.classList.toggle('solo', race.mode === 'time');
     this.root.classList.toggle('items', race.mode === 'item');
     el.mapname.textContent = race.map.name;
@@ -346,5 +346,12 @@ export class Hud {
 
   clearFinish() {
     this.el.finish.className = 'finish-banner';
+  }
+
+  // award ceremony: hide the race widgets, flash to the podium
+  ceremony() {
+    this.clearFinish();
+    this.root.classList.add('ceremony');
+    this.flash('#ffffff', 0.5);
   }
 }
