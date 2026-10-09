@@ -24,7 +24,8 @@ export const MAPS = [
       b.curve(90, 20, { stars: 'wave' });
       b.straight(14, { items: true });
       b.jumpPad(10);
-      b.straight(14);
+      b.curve(-30, 24, { stars: 'line' });
+      b.curve(30, 24);
       b.bumpers(30, 4);
       b.curve(90, 20);
       b.ramp(14, 3);
@@ -68,7 +69,8 @@ export const MAPS = [
       b.curve(90, 20);
       b.hammers(24, 2, { speed: 1.7 });
       b.jumpPad(12);
-      b.straight(12, { items: true });
+      b.curve(30, 14, { items: true });
+      b.curve(-30, 14, { stars: 'wave' });
       b.jelly(14);
       b.straight(14, { flex: 'b' });
       b.curve(90, 20, { stars: 'wave' });
@@ -159,10 +161,12 @@ export const MAPS = [
       b.discs(3, { r: 3.8, speed: 1.2 });
       b.straight(10);
       b.spinBars(28, 2, { speed: 1.5 });
-      b.straight(8);
+      b.straight(14);
       b.jumpPad(14, { power: 12 });
       b.straight(12, { cp: true });
-      b.curve(90, 22);
+      b.curve(120, 16, { stars: 'wave' });
+      b.straight(4);
+      b.curve(-30, 18);
       b.rollers(32, 4, { interval: 1.4 });
       b.straight(10, { items: true });
       b.stones(5, { round: true, size: 3.2, gap: 2.6, amp: 2.0 });
@@ -171,7 +175,7 @@ export const MAPS = [
       b.curve(90, 22);
       b.pushers(30, 3);
       b.movers(3, { axis: 'x', amp: 2.8, period: 3.2 });
-      b.straight(12, { items: true });
+      b.straight(6, { items: true });
       b.hammers(26, 2, { speed: 1.6 });
       b.straight(14, { flex: 'b', boost: [0.5] });
       b.curve(90, 22, { stars: 'wave' });
@@ -236,7 +240,8 @@ export const MAPS = [
       b.doors({ n: 4, fake: 2 });
       b.straight(10, { cp: true });
       b.stones(6, { size: 2.8, gap: 2.6, amp: 1.8 });
-      b.straight(10, { items: true });
+      b.curve(-34, 20, { items: true });
+      b.curve(34, 20);
       b.crushers(32, 2);
       b.straight(6);
       b.curve(90, 18);
@@ -317,7 +322,8 @@ export const MAPS = [
       b.rollers(30, 4, { interval: 1.3 });
       b.straight(10, { cp: true });
       b.jumpPad(12, { dy: -4 });
-      b.straight(12);
+      b.curve(30, 14, { stars: 'wave' });
+      b.curve(-30, 14);
       b.sand(14);
       b.straight(16, { flex: 'a', rise: 'close', stars: 'line' });
       b.curve(90, 20);
@@ -353,7 +359,9 @@ export const MAPS = [
       b.stones(6, { size: 2.8, gap: 2.8, amp: 1.8 });
       b.straight(8);
       b.hammers(28, 3, { speed: 2.3 });
-      b.curveRamp(90, 20, -6);
+      b.curveRamp(125, 20, -6);
+      b.straight(6);
+      b.curve(-35, 24);
       b.meteors(30, { interval: 0.6 });
       b.movers(4, { axis: 'x', amp: 3, period: 2.6 });
       b.straight(12, { cp: true, items: true });
