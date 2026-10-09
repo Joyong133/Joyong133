@@ -185,6 +185,16 @@ export class Hud {
     const g = cv.getContext('2d');
     g.clearRect(0, 0, 200, 200);
     g.drawImage(this.mmBase, 0, 0);
+    if (race.ghost) {
+      const [x, y] = this.mm.map(race.ghost.pos.x, race.ghost.pos.z);
+      g.fillStyle = 'rgba(159, 232, 255, 0.85)';
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(x, y, 4.5, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
     const order = race.runners.slice().reverse();
     for (const r of order) {
       if (r.gone) continue;

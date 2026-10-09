@@ -248,6 +248,11 @@ export class App {
     S.querySelector('.res-title').className = `res-title${res.rank === 1 && !res.solo ? ' gold' : ''}`;
     const rec = store.record(res.map.id);
     S.querySelector('.res-sub').innerHTML = `${res.map.name} · 기록 <b>${fmtTime(res.time)}</b>${best ? ' <span class="new">신기록!</span>' : ''}${rec?.time ? ` · 최고 ${fmtTime(rec.time)}` : ''}`;
+    if (res.ghostDelta !== null || res.ghostSaved) {
+      const g = res.ghostDelta;
+      const txt = g === null ? '' : `고스트보다 <b class="${g < 0 ? 'ahead' : 'behind'}">${g < 0 ? '−' : '+'}${Math.abs(g).toFixed(2)}초</b>`;
+      S.querySelector('.res-sub').innerHTML += `<br>${txt}${res.ghostSaved ? `${txt ? ' · ' : ''}새 고스트 저장!` : ''}`;
+    }
     S.querySelector('.res-table').innerHTML = res.rows
       .map(
         (r, i) =>

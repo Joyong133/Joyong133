@@ -368,6 +368,8 @@ kbd {
 .res-title { font: 400 48px/1 var(--display); color: var(--ink); }
 .res-title.gold { color: #f0a000; text-shadow: 0 3px 0 #fff3c0; }
 .res-sub { font-size: 14px; color: var(--ink-2); }
+.res-sub .ahead { color: #1f9e5a; }
+.res-sub .behind { color: #d8445a; }
 .res-sub .new { color: #fff; background: var(--pink-d); border-radius: 8px; padding: 1px 8px; font-weight: 700; }
 .res-table { width: 100%; border-collapse: collapse; font-size: 15px; }
 .res-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); }

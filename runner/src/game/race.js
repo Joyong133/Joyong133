@@ -9,6 +9,7 @@ import { Runner, GRAVITY } from './runner.js';
 import { Bot } from './ai.js';
 import { Fx } from './fx.js';
 import { Podium } from './podium.js';
+import { GhostRecorder, GhostRunner, loadGhost, saveGhost } from './ghost.js';
 import { ItemSystem, rollItem } from './items.js';
 import { toon } from '../world/geom.js';
 import { toLocalX, toLocalZ } from '../world/physics.js';
@@ -188,6 +189,15 @@ export class Race {
       r.onEvent = (type, who, a) => this.onRunnerEvent(type, who, a);
       this.scene.add(r.root);
     });
+    // time attack: race the best saved run and record this one
+    if (solo) {
+      this.recorder = new GhostRecorder();
+      const g = loadGhost(this.map.id);
+      if (g) {
+        this.ghost = new GhostRunner(g);
+        this.scene.add(this.ghost.root);
+      }
+    }
   }
 
   indexAtS(s) {
@@ -369,6 +379,7 @@ export class Race {
     }
     const running = this.state === 'run' || this.state === 'finish';
     if (running) this.clock += dt;
+    if (this.recorder && this.state === 'run' && !this.player.finished) this.recorder.sample(this.clock, this.player);
 
     c.update(this.t, dt);
     if (running) for (const b of this.bots) b.think(dt, this.t);
@@ -631,14 +642,29 @@ export class Race {
         this.app.hud.lap(done + 1, this.laps, r.lapTimes[r.lapTimes.length - 1]);
         this.app.hud.message(last ? '마지막 바퀴!' : `${done + 1}바퀴째!`, last ? 'final' : 'cp');
       }
+      if (r.isPlayer && this.ghost) this.ghostSplit(done);
     }
     // finish
     if (!r.finished && r.d >= this.total && racing) this.finish(r);
   }
 
+  // lap split against the ghost: negative = ahead of it
+  ghostSplit(lap) {
+    const gt = this.ghost.lapClock(lap);
+    if (gt === null) return;
+    const dlt = this.clock - gt;
+    this.app.hud.message(`고스트 ${dlt < 0 ? '−' : '+'}${Math.abs(dlt).toFixed(2)}초`, dlt < 0 ? 'good' : 'bad');
+  }
+
   finish(r) {
     r.finished = true;
     r.finishTime = this.clock;
+    if (r.isPlayer && this.recorder) {
+      this.recorder.sample(this.clock, r);
+      const old = this.ghost?.data.time;
+      this.ghostDelta = old ? r.finishTime - old : null;
+      if (!old || r.finishTime < old) this.ghostSaved = saveGhost(this.map.id, this.recorder.data(r));
+    }
     r.locked = true;
     this.finishOrder.push(r);
     r.place_ = this.finishOrder.length;
@@ -722,6 +748,8 @@ export class Race {
       bestLap: p.lapTimes.length ? Math.min(...p.lapTimes) : null,
       laps: this.laps,
       solo: this.mode === 'time',
+      ghostDelta: this.ghostDelta ?? null,
+      ghostSaved: !!this.ghostSaved,
     });
   }
 
@@ -793,6 +821,7 @@ export class Race {
       }
       if (r.grounded && sp > 8 && Math.random() < dt * 8) this.fx.dust(r.pos.x, r.pos.y, r.pos.z, 1);
     }
+    if (this.ghost) this.ghost.update(this.clock, dt, this.camera.position, this.state === 'intro' || this.state === 'countdown' ? 'idle' : 'run');
     // stars
     const d = this.dummy;
     for (let i = 0; i < this.stars.length; i++) {
