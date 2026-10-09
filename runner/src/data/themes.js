@@ -1,6 +1,8 @@
 // Visual + audio themes for the ten worlds.
 export const THEMES = {
   meadow: {
+    sideProp: 'flag',
+    curb: [0xe8483c, 0xffffff],
     sky: [0x4aa8ff, 0xbfe6ff, 0xe8f6ff],
     fog: [0xcfeaff, 90, 520],
     sun: [0.5, 0.85, 0.35],
@@ -34,6 +36,8 @@ export const THEMES = {
     island: 0x7bc84a,
   },
   candy: {
+    sideProp: 'lollipop',
+    curb: [0xff5a8a, 0xffffff],
     sky: [0xff8fc8, 0xffd6ea, 0xfff0f6],
     fog: [0xffdcec, 80, 480],
     sun: [-0.4, 0.8, 0.4],
@@ -70,6 +74,8 @@ export const THEMES = {
     island: 0xfff0d0,
   },
   wonder: {
+    sideProp: 'heartFlag',
+    curb: [0xd23a5b, 0x2b2440],
     sky: [0x6a4ab8, 0xd99ae8, 0xffd9f0],
     fog: [0xe2b6f0, 70, 440],
     sun: [0.3, 0.8, -0.5],
@@ -103,6 +109,8 @@ export const THEMES = {
     landmark: 'queenCastle',
   },
   beanstalk: {
+    sideProp: 'flower',
+    curb: [0xffd23f, 0x4f9a34],
     sky: [0x2f8fff, 0x9fd4ff, 0xffffff],
     fog: [0xe6f4ff, 100, 560],
     sun: [0.6, 0.7, 0.2],
@@ -133,6 +141,8 @@ export const THEMES = {
     landmark: 'beanstalk',
   },
   sea: {
+    sideProp: 'coralLamp',
+    curb: [0xffe066, 0x2a8ab0],
     sky: [0x0a3a6a, 0x1f7fb0, 0x2fb0c8],
     fog: [0x1f8fb0, 30, 260],
     sun: [0.2, 1, 0.1],
@@ -166,6 +176,8 @@ export const THEMES = {
     landmark: 'shipwreck',
   },
   snow: {
+    sideProp: 'crystal',
+    curb: [0x3a8fd8, 0xffffff],
     sky: [0x6a9ad8, 0xc8def5, 0xf0f6ff],
     fog: [0xe0ecfa, 70, 420],
     sun: [-0.5, 0.6, 0.5],
@@ -199,6 +211,9 @@ export const THEMES = {
     landmark: 'icePalace',
   },
   oz: {
+    sideProp: 'lamp',
+    lampColor: 0x6affb0,
+    curb: [0x2fa36a, 0xffe066],
     sky: [0x3ab8a8, 0xbff0d8, 0xf5ffe8],
     fog: [0xd8f5e0, 90, 520],
     sun: [0.4, 0.8, 0.4],
@@ -231,6 +246,8 @@ export const THEMES = {
     landmark: 'emeraldCity',
   },
   clock: {
+    sideProp: 'lamp',
+    curb: [0xd8b44a, 0x2a2040],
     sky: [0x0a0a2a, 0x2a2060, 0x5a3a8a],
     fog: [0x2a2050, 60, 380],
     sun: [-0.3, 0.7, -0.6],
@@ -263,6 +280,8 @@ export const THEMES = {
     landmark: 'clockTower',
   },
   desert: {
+    sideProp: 'torch',
+    curb: [0x2c8fa8, 0xf5c542],
     sky: [0x3a8ad8, 0xf5d8a0, 0xffe8c0],
     fog: [0xf5ddb0, 90, 520],
     sun: [0.6, 0.7, -0.2],
@@ -295,6 +314,8 @@ export const THEMES = {
     landmark: 'palace',
   },
   volcano: {
+    sideProp: 'torch',
+    curb: [0xff5a14, 0x3a3034],
     sky: [0x2a0a0a, 0x8a2a1a, 0xff7a3a],
     fog: [0x6a2a1a, 60, 360],
     sun: [0.2, 0.6, 0.7],

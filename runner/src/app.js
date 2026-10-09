@@ -10,6 +10,8 @@ import { Race } from './game/race.js';
 import { MAPS } from './data/maps.js';
 import { Bot } from './game/ai.js';
 import { rng } from './core/rng.js';
+import { Post } from './core/post.js';
+import { setMaxAnisotropy } from './world/textures.js';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
@@ -22,6 +24,7 @@ export class App {
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
     document.getElementById('app').appendChild(r.domElement);
+    setMaxAnisotropy(r.capabilities.getMaxAnisotropy());
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 3200);
     this.input = new Input();
     this.audio = new GameAudio();
@@ -85,6 +88,16 @@ export class App {
     const pr = this.quality === 'high' ? Math.min(dpr, 2) : this.quality === 'medium' ? Math.min(dpr, 1.5) : 1;
     this.renderer.setPixelRatio(pr);
     this.renderer.shadowMap.enabled = this.quality !== 'low';
+    // bloom + grading only on high; others get a CSS vignette instead
+    if (this.quality === 'high' && !this.post) {
+      try {
+        this.post = new Post(this.renderer);
+      } catch (e) {
+        console.warn('post-processing unavailable', e);
+        this.post = null;
+      }
+    }
+    document.body.classList.toggle('fx-high', this.quality === 'high' && !!this.post);
     this.resize();
   }
 
@@ -92,6 +105,7 @@ export class App {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
+    this.post?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.lobby?.resize(w, h);
@@ -172,16 +186,21 @@ export class App {
     this.screens.touch.classList.add('hidden');
   }
 
+  draw(scene, cam, dt) {
+    if (this.post && this.quality === 'high') this.post.render(scene, cam, dt);
+    else this.renderer.render(scene, cam);
+  }
+
   loop() {
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     if (this.screen === 'race' && this.race) {
       this.race.update(dt);
-      this.renderer.render(this.race.scene, this.camera);
+      this.draw(this.race.scene, this.camera, dt);
     } else {
       this.lobby.update(dt);
-      this.renderer.render(this.lobby.scene, this.lobby.cam);
+      this.draw(this.lobby.scene, this.lobby.cam, dt);
     }
   }
 }

@@ -127,13 +127,13 @@ export class Race {
     const sg = new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: true, bevelSize: 0.04, bevelThickness: 0.04, bevelSegments: 1 });
     sg.translate(0, 0, -0.07);
     this.stars = c.stars.map((s) => ({ ...s, on: true, t: 0 }));
-    this.starMesh = new THREE.InstancedMesh(sg, toon({ color: 0xffd23f, emissive: 0x7a5a00 }), Math.max(1, this.stars.length));
+    this.starMesh = new THREE.InstancedMesh(sg, toon({ color: 0xffd23f, emissive: 0xffa000, emissiveIntensity: 0.85 }), Math.max(1, this.stars.length));
     this.starMesh.count = this.stars.length;
     this.starMesh.frustumCulled = false;
     this.scene.add(this.starMesh);
     // item boxes
     this.boxes = this.mode === 'item' ? c.itemBoxes.map((s) => ({ ...s, on: true, t: 0 })) : [];
-    this.boxMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), toon({ map: texture('itembox'), emissive: 0x2a1a44, transparent: true, opacity: 0.92 }), Math.max(1, this.boxes.length));
+    this.boxMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), toon({ map: texture('itembox'), emissive: 0x7a4aff, emissiveIntensity: 0.6, transparent: true, opacity: 0.92 }), Math.max(1, this.boxes.length));
     this.boxMesh.count = this.boxes.length;
     this.boxMesh.frustumCulled = false;
     this.scene.add(this.boxMesh);
@@ -151,14 +151,15 @@ export class Race {
       const j = Math.floor(this.rand() * (i + 1));
       [slots[i], slots[j]] = [slots[j], slots[i]];
     }
-    const player = new Runner(me, { name: me.name, isPlayer: true, idx: 0 });
+    const outline = this.app.quality !== 'low';
+    const player = new Runner(me, { name: me.name, isPlayer: true, idx: 0, outline });
     this.player = player;
     this.runners.push(player);
     if (!solo) {
       const others = CHARACTERS.filter((ch) => ch.id !== me.id);
       const d = DIFF[this.opts.diff] || DIFF.normal;
       others.forEach((ch, i) => {
-        const r = new Runner(ch, { name: ch.name, idx: i + 1, color: TAG_COLORS[(i + 1) % TAG_COLORS.length] });
+        const r = new Runner(ch, { name: ch.name, idx: i + 1, color: TAG_COLORS[(i + 1) % TAG_COLORS.length], outline });
         const skill = d.skill[0] + this.rand() * (d.skill[1] - d.skill[0]);
         r.baseMul = d.speed[0] + this.rand() * (d.speed[1] - d.speed[0]);
         r.speedMul = r.baseMul;
@@ -356,6 +357,7 @@ export class Race {
         this.countStep = k;
         this.app.hud.countdown(String(3 - k));
         this.app.audio.sfx('count');
+        this.setLamps(k + 1, 0xff3030);
       }
       if (this.t >= INTRO + COUNT) this.go();
     }
@@ -398,7 +400,14 @@ export class Race {
     if (running) this.checkEnd(dt);
   }
 
+  // Light the first n countdown lamps on the start gate.
+  setLamps(n, color) {
+    const lamps = this.course.startArch?.userData.lamps || [];
+    lamps.forEach((l, i) => l.material.color.set(i < n ? color : 0x3a2a2a).multiplyScalar(i < n ? 3 : 1));
+  }
+
   go() {
+    this.setLamps(3, 0x3aff6a);
     this.state = 'run';
     this.clock = 0;
     this.app.hud.countdown('GO!');

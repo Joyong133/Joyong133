@@ -822,8 +822,8 @@ export class Meteors {
     this.impacts = [];
     this.list = [];
     const ballGeo = new THREE.IcosahedronGeometry(0.9, 1);
-    const ballMat = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+    const ballMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff7a1a).multiplyScalar(2.5) });
+    const coreMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffe066).multiplyScalar(3) });
     const ringGeo = new THREE.RingGeometry(1.9, 2.4, 32);
     for (let i = 0; i < 7; i++) {
       const ball = new THREE.Mesh(ballGeo, ballMat);
@@ -1091,3 +1091,127 @@ export function pillars(ctx, runs, groundY, theme) {
 }
 
 export { labelTexture };
+
+// ---------------------------------------------------------------- track dressing
+// Posts along the fences, instanced.
+export function fencePosts(ctx, posts, theme) {
+  if (!posts.length) return;
+  const col = theme.railTop ?? theme.accent ?? 0xffc93c;
+  const geo = merge([part(new THREE.CylinderGeometry(0.075, 0.085, 0.62, 8), col, [0, 0.31, 0]), part(new THREE.SphereGeometry(0.12, 10, 8), col, [0, 0.66, 0])]);
+  const mesh = new THREE.InstancedMesh(geo, ctx.mats.vcol, posts.length);
+  const m = new THREE.Matrix4();
+  posts.forEach((p, i) => mesh.setMatrixAt(i, m.makeTranslation(p.x, p.y, p.z)));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  ctx.group.add(mesh);
+}
+
+const PROP_PALETTE = [0xff5a5a, 0xffd23f, 0x5ad1ff, 0x7be07b, 0xff8fd8];
+
+// One themed prop (lit part + glowing part), standing on a little bracket
+// fixed to the side of the track.
+function sidePropGeo(type, theme) {
+  const metal = theme.metal ?? 0x8a93a6;
+  const base = part(new THREE.BoxGeometry(0.55, 0.3, 0.55), metal, [0, -0.15, 0]);
+  const C = (r0, r1, h, s = 8) => new THREE.CylinderGeometry(r0, r1, h, s);
+  const S = (r, w = 10, h = 8) => new THREE.SphereGeometry(r, w, h);
+  let lit = [base];
+  let glow = [];
+  let glowColor = 0xffe9a0;
+  switch (type) {
+    case 'flag': {
+      lit.push(part(C(0.05, 0.06, 3.4), 0xffffff, [0, 1.7, 0]), part(S(0.1), 0xffd23f, [0, 3.45, 0]));
+      lit.push(part(new THREE.ConeGeometry(0.45, 1.3, 3), PROP_PALETTE[0], [0, 2.85, 0.62], [0, 0, Math.PI / 2], [0.35, 1, 1]));
+      break;
+    }
+    case 'heartFlag': {
+      lit.push(part(C(0.05, 0.06, 3.4), 0x2b2440, [0, 1.7, 0]), part(S(0.1), 0xffd23f, [0, 3.45, 0]));
+      lit.push(part(new THREE.BoxGeometry(0.04, 0.8, 1.1), 0xffffff, [0, 2.9, 0.6]), part(S(0.22, 10, 8), 0xd23a5b, [0.03, 2.95, 0.6], [0, 0, 0], [0.3, 1, 1]));
+      break;
+    }
+    case 'lollipop': {
+      for (let i = 0; i < 6; i++) lit.push(part(C(0.07, 0.07, 0.5), i % 2 ? 0xffffff : 0xe8303c, [0, 0.25 + i * 0.5, 0]));
+      lit.push(part(C(0.6, 0.6, 0.16, 20), 0xff8fc8, [0, 3.4, 0], [Math.PI / 2, 0, 0]));
+      lit.push(part(new THREE.TorusGeometry(0.32, 0.07, 6, 18), 0xffffff, [0, 3.4, 0.09]), part(new THREE.TorusGeometry(0.15, 0.05, 6, 14), 0xffe066, [0, 3.4, 0.1]));
+      break;
+    }
+    case 'lamp': {
+      lit.push(part(C(0.06, 0.08, 3.2), metal, [0, 1.6, 0]), part(new THREE.BoxGeometry(0.06, 0.06, 0.7), metal, [0, 3.15, -0.3]));
+      lit.push(part(C(0.22, 0.16, 0.12, 8), metal, [0, 3.15, -0.62]), part(C(0.16, 0.22, 0.08, 8), metal, [0, 2.72, -0.62]));
+      glow.push(part(S(0.17), 0xffffff, [0, 2.92, -0.62], [0, 0, 0], [1, 1.3, 1]));
+      glowColor = theme.lampColor ?? 0xffd890;
+      break;
+    }
+    case 'torch': {
+      lit.push(part(C(0.07, 0.09, 1.8), 0x4a3a32, [0, 0.9, 0]), part(C(0.3, 0.16, 0.3, 8), 0x3a3034, [0, 1.95, 0]));
+      glow.push(part(new THREE.ConeGeometry(0.22, 0.6, 8), 0xffffff, [0, 2.35, 0]), part(S(0.14), 0xffffff, [0, 2.15, 0]));
+      glowColor = 0xff8a2a;
+      break;
+    }
+    case 'crystal': {
+      lit.push(part(C(0.12, 0.18, 1.4, 6), metal, [0, 0.7, 0]));
+      glow.push(part(new THREE.OctahedronGeometry(0.32, 0), 0xffffff, [0, 1.85, 0], [0, 0.4, 0], [0.8, 1.6, 0.8]));
+      glowColor = theme.lampColor ?? 0x8ae8ff;
+      break;
+    }
+    case 'flower': {
+      lit.push(part(C(0.06, 0.08, 2.6), 0x3f8f2c, [0, 1.3, 0]), part(S(0.5, 10, 6), 0x5cb840, [0.35, 1.0, 0], [0, 0, 0.5], [1, 0.2, 0.5]));
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        lit.push(part(S(0.26), 0xff8fc8, [Math.cos(a) * 0.32, 2.75 + Math.sin(a) * 0.32, 0.05], [0, 0, 0], [1, 1, 0.4]));
+      }
+      lit.push(part(S(0.2), 0xffd23f, [0, 2.75, 0.12], [0, 0, 0], [1, 1, 0.6]));
+      break;
+    }
+    case 'coralLamp': {
+      lit.push(part(C(0.07, 0.1, 2.6, 6), 0xe8735f, [0, 1.3, 0]), part(C(0.05, 0.07, 0.8, 6), 0xe8735f, [0.3, 2.3, 0], [0, 0, -0.6]));
+      glow.push(part(S(0.2), 0xffffff, [0, 2.75, 0]), part(S(0.14), 0xffffff, [0.55, 2.62, 0]));
+      glowColor = theme.lampColor ?? 0x8affea;
+      break;
+    }
+    default:
+      return null;
+  }
+  return { lit: merge(lit), glow: glow.length ? merge(glow) : null, glowColor };
+}
+
+export function sideProps(ctx, runs, theme, r) {
+  const type = theme.sideProp;
+  if (!type) return;
+  const g = sidePropGeo(type, theme);
+  if (!g) return;
+  const list = [];
+  let side = 1;
+  for (const run of runs) {
+    if (run.mat === 'plat' || run.samples.length < 2) continue;
+    const S = run.samples;
+    const len = S[S.length - 1].s - S[0].s;
+    const n = Math.floor(len / 16);
+    for (let i = 0; i < n; i++) {
+      const target = S[0].s + 8 + i * 16;
+      let k = 0;
+      while (k < S.length - 1 && S[k + 1].s < target) k++;
+      const p = S[k];
+      side = -side;
+      const off = side * (p.w / 2 + 0.75);
+      // flags and lamps lean out over the track
+      list.push({ x: p.x + rightX(p.h) * off, y: p.y, z: p.z + rightZ(p.h) * off, ry: p.h + (side > 0 ? -Math.PI / 2 : Math.PI / 2) });
+    }
+  }
+  if (!list.length) return;
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const one = new THREE.Vector3(1, 1, 1);
+  const mats = list.map((p) => m.clone().compose(new THREE.Vector3(p.x, p.y, p.z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.ry), one));
+  const lit = new THREE.InstancedMesh(g.lit, ctx.mats.vcol, list.length);
+  mats.forEach((mm, i) => lit.setMatrixAt(i, mm));
+  lit.castShadow = true;
+  lit.receiveShadow = true;
+  ctx.group.add(lit);
+  if (g.glow) {
+    const glow = new THREE.InstancedMesh(g.glow, new THREE.MeshBasicMaterial({ color: new THREE.Color(g.glowColor).multiplyScalar(2.6) }), list.length);
+    mats.forEach((mm, i) => glow.setMatrixAt(i, mm));
+    ctx.group.add(glow);
+    ctx.course.propGlow = glow;
+  }
+}

@@ -2,6 +2,8 @@
 export const CHARACTERS = [
   {
     id: 'harang',
+    eye: 0x7a4a2a,
+    extra: 'backpack',
     name: '하랑',
     title: '씩씩한 모험가',
     desc: '빨간 모자를 쓴 동네 대장. 모든 능력이 고르게 좋아서 처음 달리기에 딱 맞아요.',
@@ -12,6 +14,9 @@ export const CHARACTERS = [
   },
   {
     id: 'bori',
+    eye: 0xd94a7a,
+    extra: 'bow',
+    lashes: true,
     name: '보리',
     title: '깡충 토끼 소녀',
     desc: '토끼 귀 머리띠가 트레이드마크. 출발이 엄청 빠르고 점프도 가뿐해요.',
@@ -22,6 +27,8 @@ export const CHARACTERS = [
   },
   {
     id: 'gomdol',
+    eye: 0x6b4222,
+    extra: 'belly',
     name: '곰돌',
     title: '든든한 곰 탐험대',
     desc: '곰 모자를 눌러쓴 힘센 친구. 부딪혀도 잘 밀리지 않고 장애물도 잘 버텨요.',
@@ -34,6 +41,9 @@ export const CHARACTERS = [
   },
   {
     id: 'luna',
+    eye: 0x8a5ad8,
+    extra: 'cape',
+    lashes: true,
     name: '루나',
     title: '별빛 꼬마 마법사',
     desc: '별 모자를 쓴 견습 마법사. 최고 속도는 최강이지만 방향 전환이 조금 서툴러요.',
@@ -44,6 +54,9 @@ export const CHARACTERS = [
   },
   {
     id: 'nabi',
+    eye: 0x2fae5f,
+    extra: 'bell',
+    lashes: true,
     name: '나비',
     title: '날쌘 고양이 소녀',
     desc: '고양이처럼 가볍게 뛰어올라요. 점프와 공중 조작이 뛰어난 대신 힘이 약해요.',
@@ -55,6 +68,8 @@ export const CHARACTERS = [
   },
   {
     id: 'bolt',
+    eye: 0x38e0ff,
+    extra: 'bolts',
     name: '볼트',
     title: '태엽 로봇',
     desc: '태엽을 감으면 끝까지 달리는 로봇. 빠르고 묵직하지만 점프가 낮아요.',
@@ -66,6 +81,8 @@ export const CHARACTERS = [
   },
   {
     id: 'pipi',
+    eye: 0x2a6ad8,
+    extra: 'suspenders',
     name: '피피',
     title: '나무 인형 소년',
     desc: '요정의 마법으로 움직이는 나무 인형. 몸이 가벼워 조작이 정교해요.',
@@ -77,6 +94,9 @@ export const CHARACTERS = [
   },
   {
     id: 'ari',
+    eye: 0xe08a1a,
+    extra: 'ribbon',
+    lashes: true,
     name: '아리',
     title: '여우 꼬리 소녀',
     desc: '복슬복슬 꼬리를 흔들며 달리는 여우 소녀. 속도와 가속이 모두 좋아요.',

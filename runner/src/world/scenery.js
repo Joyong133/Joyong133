@@ -180,6 +180,77 @@ function propGeo(type) {
   return geoCache.get(type);
 }
 
+// ------------------------------------------------------------------ liquids
+// Toon water (or lava): drifting noise, cartoon wave contours, sparkles and a
+// sky-tinted fresnel at grazing angles. Lava crests are HDR so they bloom.
+function liquidMaterial(theme, lava) {
+  const base = new THREE.Color(theme.ground.color);
+  const deep = lava ? new THREE.Color(0x8a1a08) : base.clone().offsetHSL(0, 0.05, -0.12);
+  const shallow = lava ? new THREE.Color(0xff6a14) : base.clone().offsetHSL(0, 0, 0.1);
+  const foam = lava ? new THREE.Color(0xffd34d).multiplyScalar(2.2) : new THREE.Color(0xffffff);
+  const sky = new THREE.Color(theme.sky[1]);
+  return new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        time: { value: 0 },
+        deep: { value: deep },
+        shallow: { value: shallow },
+        foam: { value: foam },
+        sky: { value: sky },
+        camPos: { value: new THREE.Vector3() },
+        lava: { value: lava ? 1 : 0 },
+      },
+    ]),
+    fog: true,
+    vertexShader: `
+      varying vec3 vWorld;
+      #include <fog_pars_vertex>
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        vec4 mvPosition = viewMatrix * wp;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `
+      uniform float time;
+      uniform vec3 deep;
+      uniform vec3 shallow;
+      uniform vec3 foam;
+      uniform vec3 sky;
+      uniform vec3 camPos;
+      uniform float lava;
+      varying vec3 vWorld;
+      #include <fog_pars_fragment>
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+      }
+      void main() {
+        vec2 p = vWorld.xz * 0.07;
+        float speed = mix(1.0, 0.35, lava);
+        float n = noise(p + vec2(time * 0.05, time * 0.03) * speed) * 0.6 + noise(p * 2.3 - vec2(time * 0.07, -time * 0.04) * speed) * 0.4;
+        float bands = sin(n * 18.0 + time * 1.2 * speed);
+        float crest = smoothstep(0.82, 0.95, bands) * smoothstep(0.25, 0.6, n);
+        vec3 col = mix(deep, shallow, smoothstep(0.2, 0.85, n));
+        col = mix(col, foam, crest * mix(0.75, 1.0, lava));
+        float sp = step(0.992, hash(floor(vWorld.xz * 1.2) + floor(time * 2.5)));
+        col += sp * 0.7 * (1.0 - lava);
+        vec3 v = normalize(camPos - vWorld);
+        float fr = pow(1.0 - clamp(v.y, 0.0, 1.0), 3.0);
+        col = mix(col, sky, fr * 0.55 * (1.0 - lava));
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+        #include <fog_fragment>
+      }`,
+  });
+}
+
 // ------------------------------------------------------------------ helpers
 function bounds(course) {
   const b = new THREE.Box3();
@@ -244,7 +315,7 @@ export function buildScenery(theme, course, quality = 'medium') {
   sky.frustumCulled = false;
   group.add(sky);
   const sunDir = new THREE.Vector3(...theme.sun).normalize();
-  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTexture(), color: theme.night ? 0xf0f0ff : 0xfffbe8, fog: false, depthWrite: false, transparent: true }));
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTexture(), color: new THREE.Color(theme.night ? 0xf0f0ff : 0xfffbe8).multiplyScalar(theme.night ? 1.4 : 2.6), fog: false, depthWrite: false, transparent: true }));
   sun.scale.setScalar(theme.night ? 160 : 220);
   sun.position.copy(sunDir).multiplyScalar(1400);
   sky.add(sun);
@@ -270,21 +341,11 @@ export function buildScenery(theme, course, quality = 'medium') {
   // ground
   const gk = theme.ground.kind;
   let groundMat;
-  if (gk === 'water') {
-    const t = animatedTexture(theme.ground.tex || 'water');
-    t.repeat.set(220, 220);
-    groundMat = new THREE.MeshLambertMaterial({ color: theme.ground.color, map: t });
-    anim.push((time) => {
-      t.offset.x = time * 0.01;
-      t.offset.y = time * 0.006;
-    });
-  } else if (gk === 'lava') {
-    const t = animatedTexture('lava');
-    t.repeat.set(160, 160);
-    groundMat = new THREE.MeshBasicMaterial({ map: t, color: 0xffffff });
-    anim.push((time) => {
-      t.offset.x = Math.sin(time * 0.2) * 0.05;
-      t.offset.y = time * 0.01;
+  if (gk === 'water' || gk === 'lava') {
+    groundMat = liquidMaterial(theme, gk === 'lava');
+    anim.push((time, cam) => {
+      groundMat.uniforms.time.value = time;
+      groundMat.uniforms.camPos.value.copy(cam);
     });
   } else if (gk === 'clouds') {
     groundMat = toon({ color: 0xffffff });
@@ -405,7 +466,7 @@ export function buildScenery(theme, course, quality = 'medium') {
     fog,
     update(time, camPos) {
       sky.position.copy(camPos);
-      for (const a of anim) a(time);
+      for (const a of anim) a(time, camPos);
     },
     followShadow(target) {
       dir.position.copy(target).addScaledVector(sunDir, 90);

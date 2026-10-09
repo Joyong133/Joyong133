@@ -457,3 +457,7 @@ body:has(#touch:not(.hidden)) .gauge-label kbd, body:has(#touch:not(.hidden)) .i
   .finish-banner { font-size: 46px; }
   #pause-btn { right: 118px; }
 }
+
+/* cheap vignette when the GPU post-processing is off */
+#app::after { content: ''; position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(30, 10, 50, 0.28) 100%); }
+body.fx-high #app::after { display: none; }

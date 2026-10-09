@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { World, box, cyl } from './physics.js';
 import { GeoBuilder, ribbon, boxQuads, toon, part, merge, vcolMaterial } from './geom.js';
-import { texture, animatedTexture } from './textures.js';
+import { texture, animatedTexture, curbTexture } from './textures.js';
 import { rng, clamp, lerp, rightX, rightZ } from '../core/rng.js';
 import * as OB from './obstacles.js';
 
@@ -80,16 +80,18 @@ export class CourseBuilder {
       plat: toon({ map: texture(t.plat || t.floor) }),
       platSide: toon({ map: texture(t.platSide || t.side) }),
       rail: toon({ color: t.rail ?? 0xffffff }),
+      railTop: toon({ color: t.railTop ?? t.accent ?? 0xffc93c }),
+      curb: toon({ map: curbTexture(t.curb?.[0] ?? t.accent ?? 0xe8483c, t.curb?.[1] ?? 0xffffff) }),
       ice: toon({ map: texture('ice') }),
       sand: toon({ map: texture('sand'), color: 0xe8c890 }),
       conveyor: toon({ map: conveyor }),
       jelly: toon({ map: texture('jelly'), color: t.jelly ?? 0xffffff, emissive: 0x113322 }),
-      boost: new THREE.MeshBasicMaterial({ map: boost, transparent: true, opacity: 0.95 }),
+      boost: new THREE.MeshBasicMaterial({ map: boost, color: new THREE.Color(1.9, 1.9, 1.9), transparent: true, opacity: 0.95 }),
       hazard: toon({ color: t.hazard?.[0] ?? 0xe0533d }),
       hazard2: toon({ color: t.hazard?.[1] ?? 0xffffff }),
       metal: toon({ color: t.metal ?? 0x8a93a6 }),
       accent: toon({ color: t.accent ?? 0xffc93c }),
-      glow: new THREE.MeshBasicMaterial({ color: t.glow ?? 0xfff3a0 }),
+      glow: new THREE.MeshBasicMaterial({ color: new THREE.Color(t.glow ?? 0xfff3a0).multiplyScalar(2.5) }),
       itembox: toon({ map: texture('itembox'), emissive: 0x332255 }),
       finish: toon({ map: texture('finish') }),
       vcol: vcolMaterial(),
@@ -233,9 +235,19 @@ export class CourseBuilder {
     }
     if (rails) {
       for (const side of [-1, 1]) {
-        const rs = samples.map((s) => ({ ...s, y: s.y + 1.0, w: 0.32 }));
-        const g = this.bucket('rail');
-        ribbon(rs, g, g, { thick: 1.0 + thick, ox: (side * (w0 + w1)) / 4 + 0.16 * side, caps: true, tile: 2 });
+        // ow keeps the track width; w becomes the strip's own width
+        const ox = (s) => side * ((s.ow ?? s.w) / 2 + 0.16);
+        const wall = samples.map((s) => ({ ...s, y: s.y + 0.45, w: 0.32, ow: s.w }));
+        ribbon(wall, this.bucket('rail'), this.bucket('rail'), { thick: 0.45 + thick, ox, caps: true, tile: 2 });
+        const bar = samples.map((s) => ({ ...s, y: s.y + 1.0, w: 0.16, ow: s.w }));
+        ribbon(bar, this.bucket('railTop'), this.bucket('railTop'), { thick: 0.12, ox, caps: true, tile: 2 });
+        // posts every ~2.5 m
+        const n = Math.max(1, Math.round(len / 2.5));
+        for (let i = 0; i <= n; i++) {
+          const p = samples[Math.round((i / n) * (samples.length - 1))];
+          const o = ox(p);
+          (this.posts ||= []).push({ x: p.x + rightX(p.h) * o, y: p.y + 0.45, z: p.z + rightZ(p.h) * o });
+        }
       }
     }
     this._advance(len, dh, dy);
@@ -694,7 +706,16 @@ export class CourseBuilder {
     for (const run of this.runs) {
       if (run.samples.length < 2) continue;
       ribbon(run.samples, this.bucket(run.mat), this.bucket(run.side), { thick: run.thick, tile: 4 });
+      // racing curbs along both edges of every floor run
+      if (run.mat !== 'plat' && run.samples[0].w > 4) {
+        for (const side of [-1, 1]) {
+          const cs = run.samples.map((s) => ({ ...s, y: s.y + 0.035, w: 0.7, ow: s.w }));
+          ribbon(cs, this.bucket('curb'), this.bucket('curb'), { thick: 0.1, tile: 4, ox: (s) => side * (s.ow / 2 - 0.35) });
+        }
+      }
     }
+    OB.fencePosts(this.ctx, this.posts || [], T);
+    OB.sideProps(this.ctx, this.runs, T, this.r);
     for (const [key, gb] of this.buckets) {
       if (gb.empty) continue;
       const mesh = new THREE.Mesh(gb.geometry(), this.mats[key] || this.mats.floor);

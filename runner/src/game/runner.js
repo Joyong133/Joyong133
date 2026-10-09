@@ -10,7 +10,7 @@ import { labelTexture } from '../world/textures.js';
 export const GRAVITY = 32;
 
 export class Runner {
-  constructor(ch, { name, isPlayer = false, idx = 0, color = '#ffffff' } = {}) {
+  constructor(ch, { name, isPlayer = false, idx = 0, color = '#ffffff', outline = true } = {}) {
     this.ch = ch;
     this.name = name || ch.name;
     this.isPlayer = isPlayer;
@@ -23,7 +23,7 @@ export class Runner {
     this.input = { dx: 0, dz: 1, m: 0, jump: false, boost: false, item: false };
     this._near = [];
     this._po = { x: 0, z: 0, nx: 0, nz: 0 };
-    this.model = new CharacterModel(ch);
+    this.model = new CharacterModel(ch, { outline });
     this.root = this.model.root;
     this.shield = shieldMesh();
     this.ice = iceMesh();
@@ -75,6 +75,8 @@ export class Runner {
   }
 
   emit(type, a) {
+    if (type === 'jump' || type === 'djump' || type === 'boing') this.model.kick(2.4);
+    else if (type === 'land' && a > 4) this.model.kick(-Math.min(4.5, a * 0.22));
     this.onEvent?.(type, this, a);
   }
 
