@@ -11,11 +11,17 @@ function canvas(size) {
   return c;
 }
 
+let maxAniso = 4;
+// Called once by the app with the GPU's limit so floors stay crisp at grazing angles.
+export function setMaxAnisotropy(n) {
+  maxAniso = Math.max(1, Math.min(16, n || 4));
+}
+
 function finish(c, { repeat = true, srgb = true, nearest = false } = {}) {
   const t = new THREE.CanvasTexture(c);
   if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = maxAniso;
   if (nearest) t.magFilter = THREE.NearestFilter;
   t.needsUpdate = true;
   return t;
@@ -487,13 +493,35 @@ export function texture(name) {
   if (cache.has(name)) return cache.get(name);
   const draw = DRAW[name];
   if (!draw) throw new Error(`unknown texture ${name}`);
+  // drawn in 256-unit coordinates onto a 512px canvas for crisper surfaces
   const s = 256;
-  const c = canvas(s);
+  const c = canvas(s * 2);
   const g = c.getContext('2d');
+  g.scale(2, 2);
   draw(g, s, rng(name.length * 977 + name.charCodeAt(0)));
   const t = finish(c, OPTIONS[name]);
   t.userData.shared = true;
   cache.set(name, t);
+  return t;
+}
+
+// Racing-curb stripes for track edges, in a theme's two colours.
+export function curbTexture(a, b) {
+  const key = `_curb${a}_${b}`;
+  if (cache.has(key)) return cache.get(key);
+  const c = canvas(128);
+  const g = c.getContext('2d');
+  for (let i = 0; i < 4; i++) {
+    g.fillStyle = hex(i % 2 ? b : a);
+    g.fillRect(0, i * 32, 128, 32);
+  }
+  g.fillStyle = 'rgba(255,255,255,0.25)';
+  g.fillRect(0, 0, 18, 128);
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(110, 0, 18, 128);
+  const t = finish(c);
+  t.userData.shared = true;
+  cache.set(key, t);
   return t;
 }
 

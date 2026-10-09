@@ -64,7 +64,7 @@ export class ItemSystem {
         break;
       case 'bolt': {
         for (const o of race.runners) {
-          if (o === r || o.finished || o.s <= r.s) continue;
+          if (o === r || o.finished || o.d <= r.d) continue;
           if (o.shieldT > 0) {
             o.shieldT = 0;
             o.emit('shieldPop');
@@ -80,8 +80,8 @@ export class ItemSystem {
       case 'ice': {
         let target = null;
         for (const o of race.runners) {
-          if (o === r || o.finished || o.s <= r.s) continue;
-          if (!target || o.s < target.s) target = o;
+          if (o === r || o.finished || o.d <= r.d) continue;
+          if (!target || o.d < target.d) target = o;
         }
         if (target) {
           if (target.shieldT > 0) {
@@ -165,8 +165,8 @@ export class ItemSystem {
       let target = null;
       for (const r of race.runners) {
         if (s.hit.has(r) || r.finished) continue;
-        const d = r.s - s.s;
-        if (d > -1 && d < 25 && (!target || d < target.s - s.s)) target = r;
+        const d = race.course.ds(s.s, r.s);
+        if (d > -1 && d < 25 && (!target || d < race.course.ds(s.s, target.s))) target = r;
       }
       const p = race.course.pointAt(s.s, this.tmp);
       if (target) {
@@ -190,7 +190,7 @@ export class ItemSystem {
           r.knock(Math.cos(a) * 0.3, Math.sin(a) * 0.3, 3, 12, 1.3);
         }
       }
-      if (s.t <= 0 || s.s > race.course.goalS) {
+      if (s.t <= 0) {
         this.group.remove(s.m);
         this.storms.splice(i, 1);
       }

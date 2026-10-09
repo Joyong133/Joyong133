@@ -89,8 +89,9 @@ export function ribbon(samples, top, side, { thick = 1.2, tile = 4, caps = true,
     const rx = rightX(s.h);
     const rz = rightZ(s.h);
     const half = s.w / 2;
-    const cx = s.x + rx * ox;
-    const cz = s.z + rz * ox;
+    const off = typeof ox === 'function' ? ox(s) : ox;
+    const cx = s.x + rx * off;
+    const cz = s.z + rz * off;
     L.push([cx - rx * half, s.y, cz - rz * half]);
     R.push([cx + rx * half, s.y, cz + rz * half]);
   }
@@ -197,3 +198,28 @@ export function merge(parts) {
 }
 
 export { mergeGeometries };
+
+// ---------- cel-shading outlines (inverted hull) ----------
+const outlineMats = new Map();
+export function outlineMaterial(width = 0.02, color = 0x2a1f3a) {
+  const key = `${width}|${color}`;
+  if (outlineMats.has(key)) return outlineMats.get(key);
+  const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\n  transformed += normalize(normal) * ${width.toFixed(4)};`);
+  };
+  m.customProgramCacheKey = () => `outline${width}`;
+  m.userData.shared = true;
+  outlineMats.set(key, m);
+  return m;
+}
+
+// Add a dark back-face shell around a mesh (shares its geometry).
+export function addOutline(mesh, width = 0.02, color) {
+  const o = new THREE.Mesh(mesh.geometry, outlineMaterial(width, color));
+  o.castShadow = false;
+  o.receiveShadow = false;
+  o.userData.outline = true;
+  mesh.add(o);
+  return o;
+}

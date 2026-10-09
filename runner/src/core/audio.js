@@ -195,6 +195,17 @@ export class GameAudio {
         this.noise(0.6, { freq: 600, slide: 4000, q: 3, vol: 0.2 * v });
         [784, 1046, 1318].forEach((f, i) => this.tone(f, 0.12, { type: 'square', vol: 0.07 * v, when: i * 0.05 }));
         break;
+      case 'lap':
+        [784, 988, 1175].forEach((f, i) => this.tone(f, 0.16, { type: 'square', vol: 0.08 * v, when: i * 0.08 }));
+        break;
+      case 'finalLap':
+        [659, 784, 988, 1318, 988, 1318].forEach((f, i) => this.tone(f, 0.14, { type: 'square', vol: 0.09 * v, when: i * 0.09 }));
+        this.noise(0.8, { freq: 1500, q: 0.5, vol: 0.06 * v, when: 0.2, attack: 0.2 });
+        break;
+      case 'cheer':
+        this.noise(1.6, { freq: 1800, q: 0.4, vol: 0.12 * v, attack: 0.25 });
+        this.noise(1.2, { freq: 900, q: 0.6, vol: 0.08 * v, attack: 0.3, when: 0.1 });
+        break;
       case 'checkpoint':
         this.tone(880, 0.16, { type: 'sine', vol: 0.15 * v });
         this.tone(1320, 0.3, { type: 'sine', vol: 0.15 * v, when: 0.1 });

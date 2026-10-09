@@ -1,7 +1,7 @@
 // One race: builds the course and runners, runs the fixed-step simulation,
 // drives the camera, pickups, checkpoints, ranking and the finish.
 import * as THREE from 'three';
-import { CourseBuilder } from '../world/builder.js';
+import { buildCourse } from '../world/builder.js';
 import { buildScenery, Weather } from '../world/scenery.js';
 import { THEMES } from '../data/themes.js';
 import { CHARACTERS, charById } from '../data/characters.js';
@@ -53,10 +53,12 @@ export class Race {
     const theme = (this.theme = THEMES[map.theme]);
     this.gravity = theme.gravity ?? 1;
     const q = this.app.quality;
-    const b = new CourseBuilder(theme, map.id.length * 97 + map.level * 13);
-    map.build(b);
-    b.finalize();
+    const b = buildCourse(theme, map);
     this.course = b;
+    this.laps = map.laps || 1;
+    this.L = b.L;
+    this.lineS = b.lineS;
+    this.total = this.laps * this.L;
     this.world = b.world;
     this.scene.add(b.group);
     this.scenery = buildScenery(theme, b, q);
@@ -172,6 +174,11 @@ export class Race {
       r.s = g.s;
       r.pi = this.indexAtS(g.s);
       r.cp = 0;
+      r.lap = 0;
+      r.d = r.s - this.lineS;
+      r.lapsDone = 0;
+      r.lapMark = 0;
+      r.lapTimes = [];
       r.gauge = 0;
       r.locked = true;
       r.respawnN = 0;
@@ -416,10 +423,10 @@ export class Race {
     const D = 0.8;
     for (let i = 0; i < R.length; i++) {
       const a = R[i];
-      if (a.fallT > 0) continue;
+      if (a.fallT > 0 || a.finished) continue;
       for (let j = i + 1; j < R.length; j++) {
         const b = R[j];
-        if (b.fallT > 0) continue;
+        if (b.fallT > 0 || b.finished) continue;
         const dx = b.pos.x - a.pos.x;
         const dz = b.pos.z - a.pos.z;
         const d2 = dx * dx + dz * dz;
@@ -535,31 +542,43 @@ export class Race {
   }
 
   progress(r) {
-    const P = this.course.path;
+    const c = this.course;
+    const P = c.path;
+    const M = c.M;
+    const loop = c.loop;
+    const wrap = (k) => (loop ? ((k % M) + M) % M : clamp(k, 0, P.length - 1));
     let bi = r.pi;
     let best = Infinity;
-    const lo = Math.max(0, r.pi - 8);
-    const hi = Math.min(P.length - 1, r.pi + 14);
-    for (let k = lo; k <= hi; k++) {
-      const p = P[k];
+    for (let k = r.pi - 8; k <= r.pi + 14; k++) {
+      const j = wrap(k);
+      const p = P[j];
       const dx = p.x - r.pos.x;
       const dz = p.z - r.pos.z;
       const dy = (p.y - r.pos.y) * 0.6;
       const d = dx * dx + dz * dz + dy * dy;
       if (d < best) {
         best = d;
-        bi = k;
+        bi = j;
       }
     }
     r.pi = bi;
     const p = P[bi];
-    const along = (r.pos.x - p.x) * Math.sin(p.h) + (r.pos.z - p.z) * Math.cos(p.h);
-    const sPrev = bi > 0 ? P[bi - 1].s : p.s;
-    const sNext = bi < P.length - 1 ? P[bi + 1].s : p.s;
-    r.s = clamp(p.s + along, sPrev, sNext);
+    const along = clamp((r.pos.x - p.x) * Math.sin(p.h) + (r.pos.z - p.z) * Math.cos(p.h), -2, 2);
+    let s = p.s + along;
+    if (loop) s = ((s % this.L) + this.L) % this.L;
+    else s = clamp(s, 0, this.L);
+    // crossing the loop's seam counts laps (both ways, in case of running backwards)
+    if (loop) {
+      if (r.s - s > this.L / 2) {
+        r.lap++;
+        r.cp = 0;
+      } else if (s - r.s > this.L / 2) r.lap--;
+    }
+    r.s = s;
+    r.d = r.lap * this.L + (s - this.lineS);
 
     // fell off?
-    if (r.pos.y < this.course.lowAt(bi) - 7 && r.fallT <= 0) {
+    if (r.pos.y < c.lowAt(bi) - 7 && r.fallT <= 0) {
       r.fallT = 0.9;
       r.vel.x *= 0.3;
       r.vel.z *= 0.3;
@@ -569,23 +588,37 @@ export class Race {
       }
       const gk = this.theme.ground.kind;
       if (gk === 'water' || gk === 'lava') {
-        const gy = this.course.groundY;
+        const gy = c.groundY;
         this.splashAt = { x: r.pos.x, z: r.pos.z, y: gy, t: (r.pos.y - gy) / 20, lava: gk === 'lava' };
       }
       return;
     }
     // checkpoints
-    const cps = this.course.checkpoints;
+    const cps = c.checkpoints;
     const next = cps[r.cp + 1];
-    if (next && r.grounded && r.s >= next.s) {
+    if (next && r.grounded && r.s >= next.s && r.s < next.s + 40) {
       r.cp++;
       if (r.isPlayer) {
         this.app.audio.sfx('checkpoint');
         this.app.hud.message('체크포인트', 'cp');
       }
     }
+    const racing = this.state === 'run' || this.state === 'finish';
+    // laps
+    const done = Math.floor(r.d / this.L);
+    if (racing && done > r.lapsDone && !r.finished) {
+      r.lapsDone = done;
+      r.lapTimes.push(this.clock - r.lapMark);
+      r.lapMark = this.clock;
+      if (r.isPlayer && done < this.laps) {
+        const last = done === this.laps - 1;
+        this.app.audio.sfx(last ? 'finalLap' : 'lap');
+        this.app.hud.lap(done + 1, this.laps, r.lapTimes[r.lapTimes.length - 1]);
+        this.app.hud.message(last ? '마지막 바퀴!' : `${done + 1}바퀴째!`, last ? 'final' : 'cp');
+      }
+    }
     // finish
-    if (!r.finished && r.s >= this.course.goalS && (this.state === 'run' || this.state === 'finish')) this.finish(r);
+    if (!r.finished && r.d >= this.total && racing) this.finish(r);
   }
 
   finish(r) {
@@ -612,7 +645,7 @@ export class Race {
       if (a.finished && b.finished) return a.finishTime - b.finishTime;
       if (a.finished) return -1;
       if (b.finished) return 1;
-      return b.s - a.s;
+      return b.d - a.d;
     });
     list.forEach((r, i) => (r.rank = i + 1));
     this.order = list;
@@ -621,11 +654,11 @@ export class Race {
   // gentle rubber-banding so races stay close
   bands() {
     if (!this.bots.length) return;
-    const ps = this.player.s;
+    const ps = this.player.d;
     const hard = this.opts.diff === 'hard';
     for (const b of this.bots) {
       const r = b.r;
-      const d = ps - r.s; // > 0: bot is behind the player
+      const d = ps - r.d; // > 0: bot is behind the player
       const k = d > 0 ? clamp(d / 160, 0, 0.07) : -clamp(-d / 220, 0, hard ? 0.02 : 0.05);
       r.speedMul = r.baseMul * (1 + k);
     }
@@ -657,6 +690,7 @@ export class Race {
       time: r.finished ? r.finishTime : null,
       rank: r.rank,
       dnf: !r.finished,
+      best: r.lapTimes.length ? Math.min(...r.lapTimes) : null,
     }));
     const p = this.player;
     this.app.onRaceEnd({
@@ -665,6 +699,8 @@ export class Race {
       rows,
       rank: p.finished ? p.rank : null,
       time: p.finished ? p.finishTime : null,
+      bestLap: p.lapTimes.length ? Math.min(...p.lapTimes) : null,
+      laps: this.laps,
       solo: this.mode === 'time',
     });
   }
@@ -691,6 +727,7 @@ export class Race {
     r.invulnT = 1.6;
     r.pi = this.indexAtS(cp.s);
     r.s = cp.s;
+    r.d = r.lap * this.L + (r.s - this.lineS);
     (r.bot || (r.isPlayer && this.autoPlay))?.onRespawn();
     if (r.isPlayer) {
       this.app.audio.sfx('respawn');

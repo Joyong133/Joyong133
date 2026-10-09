@@ -994,17 +994,26 @@ export function archVisual(ctx, p, w, color, kind) {
   }
   g.add(shadowed(new THREE.Mesh(merge(parts), ctx.mats.vcol)));
   if (kind !== 'cp') {
-    const text = kind === 'goal' ? 'GOAL' : 'START';
-    const tex = kind === 'goal' ? texture('finish') : bannerTexture(text, '#ff6a3d', '#ffffff');
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(side * 2 - 0.3, 1.1), new THREE.MeshBasicMaterial({ map: kind === 'goal' ? bannerTexture('GOAL', '#1d1d24', '#ffd23f') : tex, side: THREE.DoubleSide }));
-    // one banner on each face of the beam: -z faces the runners, +z faces the far side
-    plane.position.set(0, H - 0.4, -0.24);
-    plane.rotation.y = Math.PI;
-    g.add(plane);
-    const plane2 = plane.clone();
-    plane2.position.z = 0.24;
-    plane2.rotation.y = 0;
-    g.add(plane2);
+    // banner on each face of the beam: -z faces the runners coming round
+    const front = new THREE.Mesh(new THREE.PlaneGeometry(side * 2 - 0.3, 1.1), new THREE.MeshBasicMaterial({ map: bannerTexture('START · GOAL', '#ff6a3d', '#ffffff') }));
+    front.position.set(0, H - 0.4, -0.235);
+    front.rotation.y = Math.PI;
+    g.add(front);
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(side * 2 - 0.3, 1.1), new THREE.MeshBasicMaterial({ map: texture('finish') }));
+    back.position.set(0, H - 0.4, 0.235);
+    g.add(back);
+    // countdown lamps hanging under the beam
+    g.userData.lamps = [];
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.9, 0.4), ctx.mats.metal);
+    housing.position.set(0, H - 1.6, -0.1);
+    g.add(housing);
+    for (let i = 0; i < 3; i++) {
+      const lamp = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), new THREE.MeshBasicMaterial({ color: 0x3a2a2a }));
+      lamp.position.set((i - 1) * 0.8, H - 1.6, -0.31);
+      lamp.rotation.y = Math.PI;
+      g.add(lamp);
+      g.userData.lamps.push(lamp);
+    }
   } else {
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.7), new THREE.MeshBasicMaterial({ map: bannerTexture('CHECK POINT', '#2b7fd6', '#ffffff'), side: THREE.DoubleSide }));
     sign.position.set(0, H + 0.35, 0);

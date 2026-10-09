@@ -471,10 +471,34 @@ function buildFar(group, theme, center, radius, gy, r) {
 function buildLandmark(theme, course, gy, r) {
   const goal = course.pointAt(course.goalS);
   const side = r() < 0.5 ? -1 : 1;
-  const place = (ahead, lat) => ({
-    x: goal.x + Math.sin(goal.h) * ahead + rightX(goal.h) * lat,
-    z: goal.z + Math.cos(goal.h) * ahead + rightZ(goal.h) * lat,
-  });
+  // Landmarks go where there's most room: usually the middle of the circuit.
+  // Very distant ones (ahead > 100) sit outside the loop, past the start line.
+  const near = pathHash(course);
+  const bb = bounds(course);
+  const used = [];
+  const place = (ahead) => {
+    if (ahead > 100) {
+      const c = bb.getCenter(new THREE.Vector3());
+      const R = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) / 2 + ahead;
+      return { x: c.x + Math.sin(goal.h) * R, z: c.z + Math.cos(goal.h) * R };
+    }
+    let best = null;
+    let bestD = -Infinity;
+    for (let i = 1; i < 12; i++) {
+      for (let j = 1; j < 12; j++) {
+        const x = bb.min.x + ((bb.max.x - bb.min.x) * i) / 12;
+        const z = bb.min.z + ((bb.max.z - bb.min.z) * j) / 12;
+        let d = near(x, z).d;
+        for (const u of used) d = Math.min(d, Math.hypot(u.x - x, u.z - z) - 20);
+        if (d > bestD) {
+          bestD = d;
+          best = { x, z };
+        }
+      }
+    }
+    used.push(best);
+    return best;
+  };
   const obj = new THREE.Group();
   let animFn = null;
   const add = (geo, x, y, z, ry = 0, s = 1) => {

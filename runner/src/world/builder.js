@@ -139,6 +139,7 @@ export class CourseBuilder {
   // Interpolated centreline at distance s.
   pointAt(s, out = {}) {
     const P = this.path;
+    if (this.loop) s = ((s % this.L) + this.L) % this.L;
     if (s <= P[0].s) return Object.assign(out, P[0], { s });
     const last = P[P.length - 1];
     if (s >= last.s) return Object.assign(out, last, { s });
@@ -300,8 +301,46 @@ export class CourseBuilder {
     return this;
   }
 
+  // o.flex: 'a' | 'b' marks a straight whose length is solved so the circuit
+  // closes; o.rise === 'close' turns it into the ramp that levels the loop.
   straight(len, o = {}) {
-    return this._floor(len, 0, 0, o);
+    const L = this._flexLen(len, o);
+    const dy = o.rise === 'close' ? this.closeRise ?? 0 : o.rise || 0;
+    return this._floor(L, 0, dy, o);
+  }
+
+  _flexLen(len, o) {
+    if (!o.flex) return len;
+    if (this.flexLen && this.flexLen[o.flex] !== undefined) return this.flexLen[o.flex];
+    (this.flexRec ||= {})[o.flex] = { h: this.cur.h, len };
+    return len;
+  }
+
+  // Lengths for the two flex straights (and the closing rise) that bring the
+  // track back onto the start line. Start is at the origin facing +z.
+  solveFlex() {
+    const rec = this.flexRec || {};
+    const keys = Object.keys(rec);
+    const out = { len: {}, rise: -this.cur.y, turn: this.cur.h / (Math.PI * 2), ok: true };
+    if (keys.length !== 2) {
+      out.ok = false;
+      return out;
+    }
+    const [A, B] = keys.map((k) => rec[k]);
+    const ex = -this.cur.x;
+    const ez = -this.cur.z;
+    const ax = Math.sin(A.h);
+    const az = Math.cos(A.h);
+    const bx = Math.sin(B.h);
+    const bz = Math.cos(B.h);
+    const det = ax * bz - az * bx;
+    if (Math.abs(det) < 0.2) out.ok = false;
+    const da = (ex * bz - ez * bx) / det;
+    const db = (ax * ez - az * ex) / det;
+    out.len[keys[0]] = A.len + da;
+    out.len[keys[1]] = B.len + db;
+    if (out.len[keys[0]] < 6 || out.len[keys[1]] < 6) out.ok = false;
+    return out;
   }
 
   // deg > 0 turns right
@@ -418,22 +457,19 @@ export class CourseBuilder {
         this.grid.push({ x: p.x + rightX(p.h) * lat, y: p.y, z: p.z + rightZ(p.h) * lat, h: p.h, s });
       }
     }
-    OB.archVisual(this.ctx, this.pointAt(12), W, 0xff6a3d, 'start');
+    // the start line is also the finish line of every lap
+    this.lineS = this.goalS = 12;
+    const lp = this.pointAt(12);
+    this.startArch = OB.archVisual(this.ctx, lp, W, 0xff6a3d, 'start');
+    const line = box({ x: lp.x, z: lp.z, yaw: lp.h, hx: W / 2, hz: 0.7, top: lp.y + 0.02, thick: 0.01 });
+    boxQuads(line, this.bucket('finish'), null, W / 4);
     return this;
   }
 
-  goal() {
-    this.straight(10);
-    this.goalS = this.s;
-    OB.archVisual(this.ctx, this.pointAt(this.s), this.W, 0xffd23f, 'goal');
-    const line = box({ x: this.cur.x, z: this.cur.z, yaw: this.cur.h, hx: this.W / 2, hz: 0.7, top: this.cur.y + 0.02, thick: 0.01 });
-    boxQuads(line, this.bucket('finish'), null, this.W / 4);
-    this.straight(30, { rails: true });
-    // end wall so nobody runs off the far end
-    const p = this.cur;
-    const wall = box({ x: p.x, z: p.z, yaw: p.h, hx: this.W / 2 + 0.4, hz: 0.5, top: p.y + 3, thick: 3 + this.thick });
-    this.world.addStatic(wall);
-    boxQuads(wall, this.bucket('rail'), null);
+  // End of the map script: the track must now be back at the start line.
+  close() {
+    this.loop = true;
+    this.closeErr = Math.hypot(this.cur.x, this.cur.z) + Math.abs(this.cur.y);
     return this;
   }
 
@@ -671,13 +707,19 @@ export class CourseBuilder {
     this.groundY = (this.minY ?? 0) - (T.depth ?? 16);
     OB.pillars(this.ctx, this.runs, this.groundY, T);
     // stars & item boxes are created by the race (instanced)
-    this.length = this.path[this.path.length - 1].s;
+    this.length = this.L = this.path[this.path.length - 1].s;
+    // samples that are distinct points (a loop's last sample repeats the first)
+    this.M = this.loop ? this.path.length - 1 : this.path.length;
     // lowest floor near each sample, for the fall-out check
     const P = this.path;
+    const M = this.M;
     const lows = new Float32Array(P.length);
     for (let i = 0; i < P.length; i++) {
       let m = P[i].y;
-      for (let k = Math.max(0, i - 10); k < Math.min(P.length, i + 10); k++) m = Math.min(m, P[k].y);
+      for (let k = i - 10; k < i + 10; k++) {
+        const j = this.loop ? ((k % M) + M) % M : clamp(k, 0, P.length - 1);
+        m = Math.min(m, P[j].y);
+      }
       lows[i] = m;
     }
     this.lows = lows;
@@ -688,6 +730,16 @@ export class CourseBuilder {
     return this.lows[clamp(i, 0, this.lows.length - 1)];
   }
 
+  // Signed distance from a to b along the track (shortest way round a loop).
+  ds(a, b) {
+    let d = b - a;
+    if (this.loop) {
+      const L = this.L;
+      d = ((((d + L / 2) % L) + L) % L) - L / 2;
+    }
+    return d;
+  }
+
   update(t, dt) {
     for (const d of this.dynamics) d.update(t, dt);
     for (const h of this.hazards) h.update(t, dt);
@@ -696,6 +748,24 @@ export class CourseBuilder {
   animate(t) {
     for (const a of this.animTex) a.tex.offset.y = (t * a.v) % 1;
   }
+}
+
+// Build a map's course. Loops are built twice: the first pass measures where
+// the track ends so the flex straights can be sized to close the circuit.
+export function buildCourse(theme, map) {
+  const seed = map.id.length * 97 + map.level * 13;
+  const probe = new CourseBuilder(theme, seed);
+  map.build(probe);
+  const sol = probe.solveFlex();
+  const b = new CourseBuilder(theme, seed);
+  if (sol.ok) {
+    b.flexLen = sol.len;
+    b.closeRise = sol.rise;
+  }
+  map.build(b);
+  b.finalize();
+  b.solution = sol;
+  return b;
 }
 
 export { arcAt, DEG };

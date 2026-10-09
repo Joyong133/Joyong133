@@ -323,7 +323,16 @@ kbd {
 .rank.pop { animation: pop 0.35s ease-out; }
 #hud.solo .rank { display: none; }
 @keyframes pop { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
-.mapname { font-size: 15px; text-shadow: 0 2px 0 rgba(58, 42, 92, 0.7); margin-top: 2px; }
+.mapname { font-size: 15px; text-shadow: 0 2px 0 rgba(58, 42, 92, 0.7); margin-top: 4px; }
+.lap-pill { display: inline-block; margin-top: 4px; padding: 3px 12px 4px; border-radius: 999px; background: rgba(40, 24, 70, 0.55); border: 2px solid #fff; font-size: 18px; }
+.lap-pill .lp-label { font-size: 13px; color: #ffe9a8; }
+.lap-pill b { font-weight: 400; color: var(--yellow); font-size: 22px; }
+.lap-pill.final { background: linear-gradient(90deg, #ff5a8a, #ff8a3d); }
+.lap-pill.pop { animation: pop 0.45s ease-out; }
+#hud.solo .lap-pill { display: inline-block; }
+.laptime { margin-top: 6px; font-size: 18px; color: #bfffd8; text-shadow: 0 2px 0 var(--ink); opacity: 0; }
+.laptime.show { animation: lapt 3s ease-out forwards; }
+@keyframes lapt { 0% { opacity: 0; transform: translateY(6px); } 10% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 
 .hud-tc { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); text-align: center; width: min(46vw, 460px); }
 .timer { font: 400 30px/1 var(--display); font-variant-numeric: tabular-nums; -webkit-text-stroke: 1.5px var(--ink); paint-order: stroke fill; text-shadow: 0 3px 0 var(--ink); }
@@ -334,9 +343,11 @@ kbd {
 .prog .flag { position: absolute; right: 0; top: -7px; font-size: 18px; }
 .prog .dot { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; border: 2px solid var(--ink); transition: left 0.1s linear; }
 .prog .dot.me { width: 18px; height: 18px; margin: -9px 0 0 -9px; z-index: 2; border-color: #fff; box-shadow: 0 0 0 2px var(--ink); }
-.prog .tick { position: absolute; top: 1px; bottom: 1px; width: 2px; background: rgba(127, 212, 255, 0.9); }
+.prog .tick { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 1px var(--ink); }
 
-.board { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 12px; margin: 0; padding: 6px 8px; list-style: none; counter-reset: rk; background: rgba(40, 24, 70, 0.35); border-radius: 12px; font-size: 14px; min-width: 120px; }
+.hud-tr { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px; display: grid; gap: 8px; justify-items: end; }
+.minimap { width: 150px; height: 150px; border-radius: 18px; background: rgba(40, 24, 70, 0.3); border: 2px solid rgba(255, 255, 255, 0.7); }
+.board { margin: 0; padding: 6px 8px; list-style: none; counter-reset: rk; background: rgba(40, 24, 70, 0.35); border-radius: 12px; font-size: 14px; min-width: 120px; }
 .board li { counter-increment: rk; display: flex; align-items: center; gap: 6px; padding: 1px 0; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
 .board li::before { content: counter(rk); width: 16px; text-align: right; color: #ffe9a8; }
 .board li i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #fff; }
@@ -369,12 +380,14 @@ kbd {
 .msg.good { color: #ffe14a; }
 .msg.bad { color: #ff8a8a; }
 .msg.cp { color: #7fd4ff; }
+.msg.final { color: #ff9ad5; font-size: 44px; }
 @keyframes msg { 0% { transform: translateY(16px) scale(0.6); opacity: 0; } 12% { transform: none; opacity: 1; } 75% { opacity: 1; } 100% { transform: translateY(-14px); opacity: 0; } }
 
 .banner { position: absolute; top: 20%; left: 0; right: 0; text-align: center; opacity: 0; }
 .banner.show { animation: banner 2.6s ease-out forwards; }
 .banner .b-sub { font-size: 20px; color: #ffe9a8; text-shadow: 0 2px 0 var(--ink); }
 .banner .b-name { font-size: 54px; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
+.banner .b-laps { display: inline-block; margin-top: 8px; padding: 4px 16px; border-radius: 999px; background: rgba(40, 24, 70, 0.55); font-size: 20px; color: #ffe9a8; }
 @keyframes banner { 0% { opacity: 0; transform: translateY(20px); } 15% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 
 .finish-banner { position: absolute; top: 30%; left: 0; right: 0; text-align: center; font-size: 72px; color: #fff; -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; text-shadow: 0 6px 0 var(--ink); opacity: 0; }
@@ -413,8 +426,13 @@ body:has(#touch:not(.hidden)) #hud .hud-bl { bottom: calc(220px + env(safe-area-
 body:has(#touch:not(.hidden)) #hud .hud-br { bottom: calc(230px + env(safe-area-inset-bottom)); }
 body:has(#touch:not(.hidden)) .gauge-label kbd, body:has(#touch:not(.hidden)) .item-label kbd { display: none; }
 
-#pause-btn { position: fixed; z-index: 7; top: calc(10px + env(safe-area-inset-top)); right: 150px; width: 40px; height: 40px; border-radius: 50%; border: 2px solid #fff; background: rgba(40, 24, 70, 0.4); color: #fff; font: 700 14px/1 var(--body); }
-@media (max-width: 700px) { #pause-btn { right: 12px; } }
+#pause-btn { position: fixed; z-index: 7; top: calc(10px + env(safe-area-inset-top)); right: 176px; width: 40px; height: 40px; border-radius: 50%; border: 2px solid #fff; background: rgba(40, 24, 70, 0.4); color: #fff; font: 700 14px/1 var(--body); }
+@media (max-width: 700px) {
+  #pause-btn { right: 118px; }
+  .minimap { width: 96px; height: 96px; border-radius: 14px; }
+  .lap-pill { font-size: 15px; padding: 2px 10px 3px; }
+  .lap-pill b { font-size: 18px; }
+}
 
 /* short landscape phones: keep the corners free for the thumbs */
 @media (max-height: 500px) {
@@ -428,7 +446,8 @@ body:has(#touch:not(.hidden)) .gauge-label kbd, body:has(#touch:not(.hidden)) .i
   .tb.jump { width: 84px; height: 84px; }
   .tb.boost, .tb.item { width: 58px; height: 58px; font-size: 13px; }
   body:has(#touch:not(.hidden)) #hud .hud-bl { bottom: auto; top: calc(96px + env(safe-area-inset-top)); }
-  body:has(#touch:not(.hidden)) #hud .hud-br { bottom: auto; top: calc(58px + env(safe-area-inset-top)); }
+  body:has(#touch:not(.hidden)) #hud .hud-br { bottom: auto; top: calc(116px + env(safe-area-inset-top)); }
+  .minimap { width: 96px; height: 96px; border-radius: 14px; }
   body:has(#touch:not(.hidden)) .item-slot { width: 58px; height: 58px; font-size: 32px; }
   body:has(#touch:not(.hidden)) .gauge-label, body:has(#touch:not(.hidden)) .item-label { display: none; }
   .count { font-size: 90px; top: 26%; }
@@ -436,5 +455,5 @@ body:has(#touch:not(.hidden)) .gauge-label kbd, body:has(#touch:not(.hidden)) .i
   .msg { font-size: 24px; }
   .banner .b-name { font-size: 34px; }
   .finish-banner { font-size: 46px; }
-  #pause-btn { right: 12px; }
+  #pause-btn { right: 118px; }
 }

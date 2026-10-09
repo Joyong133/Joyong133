@@ -29,7 +29,7 @@ export class Bot {
   }
 
   onRespawn() {
-    this.bestS = this.r.s;
+    this.bestS = this.r.d;
     this.stuckT = 0;
     this.air = null;
     this.door = null;
@@ -51,8 +51,8 @@ export class Bot {
       return;
     }
     // stuck watchdog
-    if (r.s > this.bestS + 0.5) {
-      this.bestS = r.s;
+    if (r.d > this.bestS + 0.5) {
+      this.bestS = r.d;
       this.stuckT = 0;
     } else if (race.state === 'run') {
       this.stuckT += dt;
@@ -84,18 +84,21 @@ export class Bot {
     // steer around posts and bumpers: pick the clearest lane ahead
     const obst = [];
     for (const a of c.avoid) {
-      if (a.s < r.s - 1 || a.s > r.s + 14) continue;
+      if (a.s < r.s - 1.5 || a.s > r.s + 14) continue;
       const ap = c.pointAt(a.s, this.q2 || (this.q2 = {}));
       obst.push({ cl: (a.x - ap.x) * rightX(ap.h) + (a.z - ap.z) * rightZ(ap.h), r: a.r, d: a.s - r.s });
     }
     if (obst.length) {
       const half = tp.w / 2 - 0.9;
+      // where we are across the track now; a lane change takes ~7 m
+      const curLat = (r.pos.x - here.x) * rightX(here.h) + (r.pos.z - here.z) * rightZ(here.h);
       let best = lat;
       let bestCost = Infinity;
       for (let cand = -half; cand <= half + 1e-6; cand += 0.5) {
         let cost = Math.abs(cand - lat) * 0.4 + Math.abs(cand - this.avoidLat) * 0.3;
         for (const o of obst) {
-          const gap = Math.abs(cand - o.cl) - (o.r + 0.9);
+          const lt = curLat + (cand - curLat) * clamp(o.d / 7, 0, 1);
+          const gap = Math.abs(lt - o.cl) - (o.r + 0.9);
           if (gap < 0) cost += (10 - gap * 6) * (o.d < 6 ? 2 : 1);
         }
         if (cost < bestCost) {
@@ -224,7 +227,7 @@ export class Bot {
     if (it === 'rocket') go = r.grounded && !this.gapNear(r.s, 20) && !this.sectionAt(r.s);
     else if (it === 'shield') go = true;
     else if (it === 'bolt' || it === 'ice' || it === 'storm') go = r.rank > 1;
-    else if (it === 'honey') go = race.runners.some((o) => o !== r && o.s < r.s && r.s - o.s < 18);
+    else if (it === 'honey') go = race.runners.some((o) => o !== r && o.d < r.d && r.d - o.d < 18);
     else go = true;
     if (go || this.itemT < -6) r.input.item = true;
     else this.itemT = 0.5;

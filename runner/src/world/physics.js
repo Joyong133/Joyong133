@@ -140,8 +140,10 @@ export function floorTop(c, x, z, margin = FOOT_R) {
 // Returns null when untouched, otherwise writes the resolved position and
 // outward normal into `out` and returns it.
 export function pushOut(c, x, z, r, feet, head, out) {
+  // walls and rails can't be stepped onto, only floors can
+  const step = c.floor ? STEP_UP : 0;
   if (c.kind === 'cyl') {
-    if (feet + STEP_UP >= c.top || head <= c.bot) return null;
+    if (feet + step >= c.top || head <= c.bot) return null;
     const dx = x - c.x;
     const dz = z - c.z;
     const d2 = dx * dx + dz * dz;
@@ -162,7 +164,7 @@ export function pushOut(c, x, z, r, feet, head, out) {
   const cx = clamp(lx, -c.hx, c.hx);
   const cz = clamp(lz, -c.hz, c.hz);
   const top = topAt(c, cz);
-  if (feet + STEP_UP >= top || head <= c.bot) return null;
+  if (feet + step >= top || head <= c.bot) return null;
   const dx = lx - cx;
   const dz = lz - cz;
   const d2 = dx * dx + dz * dz;
