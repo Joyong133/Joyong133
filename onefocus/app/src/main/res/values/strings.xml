@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">원앱 집중</string>
+    <string name="service_label">원앱 집중 잠금</string>
+    <string name="service_description">집중 세션 동안 선택한 앱 하나만 쓸 수 있도록 다른 앱 실행과 앱 나가기를 막고, 화면 탭 횟수를 셉니다. 화면 내용이나 입력한 글자는 읽거나 저장하지 않습니다.</string>
+</resources>

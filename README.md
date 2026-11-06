@@ -230,3 +230,8 @@ runner/src/
 
 - 맵은 `runner/src/data/maps.js`에서 `b.straight(40)`, `b.curve(90, 20)`, `b.stones(6)`, `b.hammers(30, 2)` 같은 한 줄짜리 구간을 이어 붙여 만듭니다. 커브 각도의 합이 360°가 되게 하고, 직선 두 개에 `{ flex: 'a' }`, `{ flex: 'b' }`를 붙이면 코스가 출발선으로 정확히 돌아오도록 그 두 직선의 길이를 자동으로 맞춰 줍니다(`{ rise: 'close' }`는 높이를 맞춤). 마지막은 `b.close()`.
 - 테스트용 주소: `runner/?race=3&mode=item` 로 바로 3번 맵 아이템전에 들어가고, `&auto`를 붙이면 내 캐릭터도 봇이 대신 달립니다.
+
+## 🎯 원앱 집중 (안드로이드 APK)
+
+앱 하나를 고르면 탭 1000회 또는 타이머가 끝날 때까지 다른 앱 실행·앱 나가기를 막아 주는 안드로이드 앱입니다.
+**[OneFocus.apk 받기](https://github.com/joyong133/Joyong133/releases/download/onefocus-latest/OneFocus.apk)** · 자세한 내용은 [onefocus/README.md](onefocus/README.md)
