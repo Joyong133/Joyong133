@@ -11,8 +11,8 @@ android {
         applicationId = "com.joyong.onefocus"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     // 고정 서명 키: 새 버전을 받아도 지우지 않고 바로 덮어 설치할 수 있게 합니다.

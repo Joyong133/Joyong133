@@ -214,6 +214,69 @@
                 android:textStyle="bold" />
         </LinearLayout>
 
+        <!-- 3. 허용할 앱 설정 -->
+        <LinearLayout
+            android:id="@+id/allowCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="집중 중 허용할 앱"
+                android:textColor="@color/text"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="집중 중 화면 위쪽 표시(☰)를 누르면 여기서 허용한 앱을 열 수 있어요."
+                android:textColor="@color/sub"
+                android:textSize="13sp" />
+
+            <CheckBox
+                android:id="@+id/allowPhone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="📞 전화 (전화 · 연락처)"
+                android:textSize="15sp" />
+
+            <CheckBox
+                android:id="@+id/allowSms"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="💬 메시지 (문자)"
+                android:textSize="15sp" />
+
+            <LinearLayout
+                android:id="@+id/extraList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/addAllowedBtn"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="+ 허용할 앱 추가 (카카오톡 등)"
+                android:textColor="@color/primary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="※ 걸려 오는 전화 받기와 긴급 전화는 항상 가능해요."
+                android:textColor="@color/sub"
+                android:textSize="12sp" />
+        </LinearLayout>
+
         <!-- 진행 중 -->
         <LinearLayout
             android:id="@+id/activeCard"
@@ -245,7 +308,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:lineSpacingExtra="3dp"
-            android:text="• 집중 중에는 홈·최근 앱·알림창·다른 앱 실행이 막히고, 선택한 앱을 나가면 바로 다시 열립니다.\n• 탭 횟수는 화면을 터치할 때마다 1회씩 셉니다.\n• 전화 앱과 키보드는 그대로 쓸 수 있어요.\n• 시작하면 중간에 끌 수 없으니 신중하게 시작하세요."
+            android:text="• 집중 중에는 홈·최근 앱·알림창·다른 앱 실행이 막히고, 선택한 앱을 나가면 바로 다시 열립니다.\n• 탭 횟수는 화면을 터치할 때마다 1회씩 셉니다.\n• 키보드와 ‘집중 중 허용할 앱’에서 고른 앱은 쓸 수 있어요.\n• 시작하면 중간에 끌 수 없으니 신중하게 시작하세요."
             android:textColor="@color/sub"
             android:textSize="12sp" />
     </LinearLayout>

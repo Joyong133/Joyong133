@@ -20,6 +20,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -57,6 +58,10 @@ class MainActivity : Activity() {
     private lateinit var startBtn: Button
     private lateinit var activeCard: View
     private lateinit var activeText: TextView
+    private lateinit var allowCard: View
+    private lateinit var allowPhone: CheckBox
+    private lateinit var allowSms: CheckBox
+    private lateinit var extraList: LinearLayout
 
     private var selectedPkg: String? = null
     private var selectedLabel: String? = null
@@ -89,6 +94,25 @@ class MainActivity : Activity() {
         startBtn = findViewById(R.id.startBtn)
         activeCard = findViewById(R.id.activeCard)
         activeText = findViewById(R.id.activeText)
+        allowCard = findViewById(R.id.allowCard)
+        allowPhone = findViewById(R.id.allowPhone)
+        allowSms = findViewById(R.id.allowSms)
+        extraList = findViewById(R.id.extraList)
+
+        // 집중 중 허용할 앱
+        AllowedApps.dialerPackage(this)?.let { allowPhone.text = "📞 전화 (${AllowedApps.label(this, it)} · 연락처)" }
+        AllowedApps.smsPackage(this)?.let { allowSms.text = "💬 메시지 (${AllowedApps.label(this, it)})" }
+        allowPhone.isChecked = Session.allowPhone(this)
+        allowSms.isChecked = Session.allowSms(this)
+        allowPhone.setOnCheckedChangeListener { _, v -> Session.setAllowPhone(this, v) }
+        allowSms.setOnCheckedChangeListener { _, v -> Session.setAllowSms(this, v) }
+        findViewById<View>(R.id.addAllowedBtn).setOnClickListener {
+            showAppPicker("허용할 앱 추가") { e ->
+                Session.setExtraAllowed(this, Session.extraAllowed(this) + e.pkg)
+                renderExtraList()
+            }
+        }
+        renderExtraList()
 
         // 지난번 설정 불러오기
         Session.target(this)?.let { pkg ->
@@ -100,7 +124,7 @@ class MainActivity : Activity() {
         applyModeRows()
 
         modeGroup.setOnCheckedChangeListener { _, _ -> applyModeRows() }
-        findViewById<View>(R.id.pickRow).setOnClickListener { showAppPicker() }
+        findViewById<View>(R.id.pickRow).setOnClickListener { pickTarget() }
         permBtn.setOnClickListener {
             try {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -181,6 +205,7 @@ class MainActivity : Activity() {
 
         val active = Session.isActive(this)
         setupCard.visibility = if (active) View.GONE else View.VISIBLE
+        allowCard.visibility = if (active) View.GONE else View.VISIBLE
         activeCard.visibility = if (active) View.VISIBLE else View.GONE
         if (active) {
             activeText.text = "🔒 「${Session.label(this)}」 집중 중\n${Session.progressText(this)}"
@@ -202,7 +227,42 @@ class MainActivity : Activity() {
     private fun dp(v: Float): Int =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics).toInt()
 
-    private fun showAppPicker() {
+    private fun renderExtraList() {
+        extraList.removeAllViews()
+        for (pkg in Session.extraAllowed(this).sortedBy { AllowedApps.label(this, it).lowercase() }) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(4f), dp(6f), 0, dp(6f))
+            }
+            row.addView(ImageView(this).apply {
+                try { setImageDrawable(packageManager.getApplicationIcon(pkg)) } catch (_: Exception) {}
+            }, LinearLayout.LayoutParams(dp(28f), dp(28f)))
+            row.addView(TextView(this).apply {
+                text = AllowedApps.label(this@MainActivity, pkg)
+                textSize = 15f
+                setTextColor(0xFF1D1B24.toInt())
+                setPadding(dp(12f), 0, 0, 0)
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            row.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
+                text = "삭제"
+                setOnClickListener {
+                    Session.setExtraAllowed(this@MainActivity, Session.extraAllowed(this@MainActivity) - pkg)
+                    renderExtraList()
+                }
+            })
+            extraList.addView(row)
+        }
+    }
+
+    private fun pickTarget() {
+        showAppPicker("집중할 앱 선택") { e ->
+            setSelected(e.pkg, e.label)
+            Session.remember(this, e.pkg, e.label)
+        }
+    }
+
+    private fun showAppPicker(title: String, onPick: (AppEntry) -> Unit) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16f), dp(8f), dp(16f), 0)
@@ -221,7 +281,7 @@ class MainActivity : Activity() {
         list.visibility = View.GONE
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("집중할 앱 선택")
+            .setTitle(title)
             .setView(root)
             .setNegativeButton("취소", null)
             .create()
@@ -252,9 +312,7 @@ class MainActivity : Activity() {
         }
         list.adapter = adapter
         list.setOnItemClickListener { _, _, position, _ ->
-            val e = shown[position]
-            setSelected(e.pkg, e.label)
-            Session.remember(this, e.pkg, e.label)
+            onPick(shown[position])
             dialog.dismiss()
         }
 
@@ -300,7 +358,7 @@ class MainActivity : Activity() {
         val label = selectedLabel
         if (pkg == null || label == null) {
             Toast.makeText(this, "먼저 집중할 앱을 선택하세요.", Toast.LENGTH_SHORT).show()
-            showAppPicker()
+            pickTarget()
             return
         }
         if (FocusService.instance == null) {

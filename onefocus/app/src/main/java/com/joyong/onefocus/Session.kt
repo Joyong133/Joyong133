@@ -20,6 +20,15 @@ object Session {
     fun taps(c: Context) = p(c).getInt("taps", 0)
     fun endAt(c: Context) = p(c).getLong("endAt", 0L)
 
+    // ── 집중 중에도 허용할 앱 (설정) ──
+    fun allowPhone(c: Context) = p(c).getBoolean("allowPhone", true)
+    fun allowSms(c: Context) = p(c).getBoolean("allowSms", true)
+    fun extraAllowed(c: Context): Set<String> = p(c).getStringSet("extraAllowed", null)?.toSet() ?: emptySet()
+
+    fun setAllowPhone(c: Context, v: Boolean) = p(c).edit().putBoolean("allowPhone", v).apply()
+    fun setAllowSms(c: Context, v: Boolean) = p(c).edit().putBoolean("allowSms", v).apply()
+    fun setExtraAllowed(c: Context, v: Set<String>) = p(c).edit().putStringSet("extraAllowed", HashSet(v)).apply()
+
     fun remainingTaps(c: Context) = (goalTaps(c) - taps(c)).coerceAtLeast(0)
     fun remainingMillis(c: Context) = (endAt(c) - System.currentTimeMillis()).coerceAtLeast(0L)
 
