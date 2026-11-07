@@ -9,8 +9,8 @@ import android.provider.Telephony
 /**
  * Fires for EVERY incoming SMS once this app is the default SMS app.
  * When the app is default, the system no longer writes SMS to the provider
- * automatically — we do. So if we simply skip writing a blocked sender's
- * message, it is never stored and therefore never appears anywhere.
+ * automatically — we do. So if we simply skip writing a blocked message,
+ * it is never stored and therefore never appears anywhere.
  */
 class SmsReceiver : BroadcastReceiver() {
 
@@ -26,13 +26,10 @@ class SmsReceiver : BroadcastReceiver() {
         val body = parts.joinToString("") { it.messageBody ?: "" }
         val date = parts[0].timestampMillis.takeIf { it > 0 } ?: System.currentTimeMillis()
 
-        if (BlockStore.isBlocked(context, sender)) {
-            // Drop it completely: not written to the SMS provider, no
-            // notification, and no copy kept anywhere — it simply never appears.
-            return
-        }
+        // Blocked number or blocked keyword: drop it completely — not stored,
+        // no notification, no copy kept anywhere.
+        if (BlockStore.shouldDropSms(context, sender, body)) return
 
-        // Not blocked → store in the inbox so it shows normally.
         val values = ContentValues().apply {
             put(Telephony.Sms.ADDRESS, sender)
             put(Telephony.Sms.BODY, body)

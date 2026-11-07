@@ -2,6 +2,16 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
+        android:id="@+id/action_search"
+        android:icon="@drawable/ic_search"
+        android:title="검색"
+        app:actionViewClass="androidx.appcompat.widget.SearchView"
+        app:showAsAction="always|collapseActionView" />
+    <item
+        android:id="@+id/action_read_all"
+        android:title="모두 읽음으로 표시"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_blocked"
         android:title="차단 관리 (문자·전화)"
         app:showAsAction="never" />

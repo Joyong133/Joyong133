@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.provider.ContactsContract
 import android.provider.Settings
 import android.provider.Telephony
 import android.text.InputType
@@ -44,11 +45,10 @@ object Ui {
     }
 
     fun listTime(ctx: Context, t: Long): String {
-        val now = System.currentTimeMillis()
+        val year = { ms: Long -> Calendar.getInstance().apply { timeInMillis = ms }.get(Calendar.YEAR) }
         val flags = when {
             DateUtils.isToday(t) -> DateUtils.FORMAT_SHOW_TIME
-            Calendar.getInstance().apply { timeInMillis = t }.get(Calendar.YEAR) ==
-                Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.YEAR) ->
+            year(t) == year(System.currentTimeMillis()) ->
                 DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_NO_YEAR or DateUtils.FORMAT_ABBREV_MONTH
             else -> DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_NUMERIC_DATE
         }
@@ -74,9 +74,34 @@ object Ui {
 
     fun avatarColor(key: String): Int = palette[Math.floorMod(key.hashCode(), palette.size)]
 
+    // ---- contacts ----
+
+    /** System contact picker for phone numbers (needs no contacts permission). */
+    fun pickPhoneIntent(): Intent =
+        Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+
+    fun phoneFromPick(ctx: Context, uri: Uri?): String? {
+        if (uri == null) return null
+        return runCatching {
+            ctx.contentResolver.query(
+                uri, arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null
+            )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
     // ---- dialogs ----
 
-    fun askNumber(activity: Activity, onOk: (String) -> Unit, onCancel: (() -> Unit)? = null) {
+    /**
+     * Ask for a recipient. [onPickContact], if given, adds a "연락처" button;
+     * the caller launches the picker and handles the result.
+     */
+    fun askNumber(
+        activity: Activity,
+        title: String = "새 메시지",
+        onOk: (String) -> Unit,
+        onCancel: (() -> Unit)? = null,
+        onPickContact: (() -> Unit)? = null
+    ) {
         val input = EditText(activity).apply {
             inputType = InputType.TYPE_CLASS_PHONE
             hint = "받는 사람 전화번호"
@@ -86,8 +111,8 @@ object Ui {
             setPadding(pad, pad / 2, pad, 0)
             addView(input)
         }
-        AlertDialog.Builder(activity)
-            .setTitle("새 메시지")
+        val builder = AlertDialog.Builder(activity)
+            .setTitle(title)
             .setView(box)
             .setPositiveButton("확인") { _, _ ->
                 val n = input.text.toString().trim()
@@ -95,16 +120,20 @@ object Ui {
             }
             .setNegativeButton("취소") { _, _ -> onCancel?.invoke() }
             .setOnCancelListener { onCancel?.invoke() }
-            .show()
+        if (onPickContact != null) {
+            builder.setNeutralButton("연락처") { _, _ -> onPickContact() }
+        }
+        builder.show()
     }
 
     fun confirmBlock(activity: Activity, address: String, done: () -> Unit) {
         AlertDialog.Builder(activity)
             .setTitle("$address 차단")
-            .setMessage("이 번호와 주고받은 문자가 모두 삭제되고, 앞으로 오는 문자는 저장되지 않아 어디에도 보이지 않습니다.")
+            .setMessage("이 번호와 주고받은 문자가 모두 삭제되고, 앞으로 오는 문자와 전화는 어디에도 나타나지 않습니다.")
             .setPositiveButton("차단") { _, _ ->
                 BlockStore.addBlocked(activity, address)
                 val removed = if (isDefaultSmsApp(activity)) SmsRepo.deleteFromAddress(activity, address) else 0
+                CallLogCleaner.cleanAsync(activity)
                 toast(activity, if (removed > 0) "차단했습니다 · 기존 문자 ${removed}건 삭제" else "차단했습니다")
                 done()
             }

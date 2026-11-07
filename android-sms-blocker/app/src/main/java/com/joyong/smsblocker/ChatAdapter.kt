@@ -10,7 +10,8 @@ import com.joyong.smsblocker.databinding.ItemMsgOutBinding
 
 /** Chat bubbles (incoming left, outgoing right) with a date header per day. */
 class ChatAdapter(
-    private val onLongPress: (String) -> Unit
+    private val onLongPress: (ChatMsg) -> Unit,
+    private val onFailedTap: (ChatMsg) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private sealed class Row {
@@ -57,22 +58,29 @@ class ChatAdapter(
                 val m = (rows[position] as Row.Bubble).m
                 holder.b.tvBody.text = m.body
                 holder.b.tvTime.text = Ui.bubbleTime(ctx, m.date)
-                holder.b.tvBody.setOnLongClickListener { onLongPress(m.body); true }
+                holder.b.tvBody.setOnLongClickListener { onLongPress(m); true }
             }
             is OutVH -> {
                 val m = (rows[position] as Row.Bubble).m
+                val failed = m.status == ChatMsg.FAILED
                 holder.b.tvBody.text = m.body
                 holder.b.tvTime.text = when (m.status) {
                     ChatMsg.SENDING -> "전송 중…"
-                    ChatMsg.FAILED -> "전송 실패"
+                    ChatMsg.FAILED -> "전송 실패 · 눌러서 다시 보내기"
                     else -> Ui.bubbleTime(ctx, m.date)
                 }
                 holder.b.tvTime.setTextColor(
-                    ContextCompat.getColor(
-                        ctx, if (m.status == ChatMsg.FAILED) R.color.error else R.color.text_secondary
-                    )
+                    ContextCompat.getColor(ctx, if (failed) R.color.error else R.color.text_secondary)
                 )
-                holder.b.tvBody.setOnLongClickListener { onLongPress(m.body); true }
+                holder.b.tvBody.alpha = if (failed) 0.6f else 1f
+                holder.b.tvBody.setOnLongClickListener { onLongPress(m); true }
+                if (failed) {
+                    holder.b.tvBody.setOnClickListener { onFailedTap(m) }
+                    holder.b.tvTime.setOnClickListener { onFailedTap(m) }
+                } else {
+                    holder.b.tvBody.setOnClickListener(null)
+                    holder.b.tvTime.setOnClickListener(null)
+                }
             }
         }
     }

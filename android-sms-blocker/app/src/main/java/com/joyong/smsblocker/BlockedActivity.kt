@@ -12,11 +12,12 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.joyong.smsblocker.databinding.ActivityBlockedBinding
 
-/** Manage blocked numbers (SMS + calls) and call blocking. */
+/** Manage blocked numbers (SMS + calls), blocked keywords and call blocking. */
 class BlockedActivity : AppCompatActivity() {
 
     private lateinit var b: ActivityBlockedBinding
     private lateinit var blockedAdapter: BlockedAdapter
+    private lateinit var keywordAdapter: BlockedAdapter
 
     private val callRoleLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -55,6 +56,29 @@ class BlockedActivity : AppCompatActivity() {
         }
         b.rvBlocked.layoutManager = LinearLayoutManager(this)
         b.rvBlocked.adapter = blockedAdapter
+
+        keywordAdapter = BlockedAdapter { keyword ->
+            BlockStore.removeKeyword(this, keyword)
+            refresh()
+        }
+        b.rvKeywords.layoutManager = LinearLayoutManager(this)
+        b.rvKeywords.adapter = keywordAdapter
+
+        b.btnAddKeyword.setOnClickListener {
+            val kw = b.etKeyword.text?.toString()?.trim().orEmpty()
+            if (kw.isEmpty()) {
+                Ui.toast(this, "문구를 입력하세요")
+                return@setOnClickListener
+            }
+            if (kw.filterNot { it.isWhitespace() }.length < 2) {
+                Ui.toast(this, "너무 짧은 문구는 다른 문자까지 막을 수 있어요. 2글자 이상 입력하세요")
+                return@setOnClickListener
+            }
+            BlockStore.addKeyword(this, kw)
+            b.etKeyword.setText("")
+            Ui.toast(this, "'$kw' 문구를 차단했습니다")
+            refresh()
+        }
 
         b.btnAdd.setOnClickListener {
             val num = b.etNumber.text?.toString()?.trim().orEmpty()
@@ -117,6 +141,10 @@ class BlockedActivity : AppCompatActivity() {
         val blocked = BlockStore.getBlocked(this)
         blockedAdapter.submit(blocked)
         b.tvBlockedEmpty.isVisible = blocked.isEmpty()
+
+        val keywords = BlockStore.getKeywords(this)
+        keywordAdapter.submit(keywords)
+        b.tvKeywordsEmpty.isVisible = keywords.isEmpty()
     }
 
     private fun refreshCallCard() {

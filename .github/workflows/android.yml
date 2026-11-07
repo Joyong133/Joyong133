@@ -15,6 +15,12 @@ jobs:
     defaults:
       run:
         working-directory: android-sms-blocker
+    env:
+      # The keystore file itself is the secret (repository secret ANSIM_KEYSTORE,
+      # base64). These only unlock it, so they can live here.
+      SIGNING_STORE_PASSWORD: ansim-message-key
+      SIGNING_KEY_PASSWORD: ansim-message-key
+      SIGNING_KEY_ALIAS: ansim
     steps:
       - uses: actions/checkout@v4
 
@@ -32,17 +38,37 @@ jobs:
       - name: Install SDK packages
         run: yes | sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Prepare signing key
+        id: sign
+        env:
+          ANSIM_KEYSTORE: ${{ secrets.ANSIM_KEYSTORE }}
+        run: |
+          KS="$RUNNER_TEMP/ansim.p12"
+          if [ -n "$ANSIM_KEYSTORE" ]; then
+            printf '%s' "$ANSIM_KEYSTORE" | tr -d ' \r\n' | base64 -d > "$KS"
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            # No saved key yet: sign with a throwaway key so the build still works.
+            # APKs from such builds can't update each other (uninstall first).
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias "$SIGNING_KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$SIGNING_STORE_PASSWORD" -keypass "$SIGNING_KEY_PASSWORD" \
+              -dname "CN=Ansim Message (temporary)"
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANSIM_KEYSTORE secret is not set — this APK uses a temporary key and will not install over an existing copy."
+          fi
+          echo "SIGNING_STORE_FILE=$KS" >> "$GITHUB_ENV"
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ansim-message.apk
+      - name: Build signed release APK
+        run: |
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk ansim-message.apk
 
       - name: Upload APK (artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: sms-blocker-debug-apk
-          path: android-sms-blocker/app/build/outputs/apk/debug/ansim-message.apk
+          name: sms-blocker-apk
+          path: android-sms-blocker/ansim-message.apk
           if-no-files-found: error
 
       - name: Publish release (direct download)
@@ -51,7 +77,8 @@ jobs:
           tag_name: apk-latest
           name: 안심메시지 최신 APK
           body: |
-            차단 번호 문자를 저장하지 않는 기본 SMS 앱. 아래 ansim-message.apk 를 받아 설치하세요.
-            (디버그 서명본 · Android 8.0+ · 설치 시 "출처를 알 수 없는 앱" 허용 필요)
-          files: android-sms-blocker/app/build/outputs/apk/debug/ansim-message.apk
+            차단 번호·문구의 문자와 전화를 흔적 없이 막는 기본 SMS 앱. 아래 ansim-message.apk 를 받아 설치하세요.
+            ${{ steps.sign.outputs.stable == 'true' && '고정 서명 키로 빌드됨 — 기존 앱 위에 바로 업데이트됩니다.' || '임시 서명 키로 빌드됨 — 설치 전에 기존 앱을 지워야 합니다.' }}
+            (Android 8.0+ · 설치 시 "출처를 알 수 없는 앱" 허용 필요)
+          files: android-sms-blocker/ansim-message.apk
           make_latest: true

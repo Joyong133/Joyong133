@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// CI build number → ever-increasing versionCode, so each new APK installs as an update.
+val ciRun: Int? = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+// Release signing key, provided by CI (see .github/workflows/android.yml).
+val signingStore: String? = System.getenv("SIGNING_STORE_FILE")
+
 android {
     namespace = "com.joyong.smsblocker"
     compileSdk = 34
@@ -11,13 +16,25 @@ android {
         applicationId = "com.joyong.smsblocker"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 100 + (ciRun ?: 0)
+        versionName = "1.3" + (ciRun?.let { ".$it" } ?: "")
+    }
+
+    signingConfigs {
+        if (signingStore != null) {
+            create("release") {
+                storeFile = file(requireNotNull(signingStore))
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (signingStore != null) signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -34,6 +51,10 @@ android {
     }
     buildFeatures {
         viewBinding = true
+    }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 

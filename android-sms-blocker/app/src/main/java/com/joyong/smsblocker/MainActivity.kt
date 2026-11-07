@@ -15,6 +15,7 @@ import android.view.MenuItem
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SearchView
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -27,6 +28,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: ConversationAdapter
     private var askedPermissions = false
 
+    private var all: List<Conversation> = emptyList()
+    private var query = ""
+    private var bodyMatches: Set<Long> = emptySet()
+
     private val roleLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             if (Ui.isDefaultSmsApp(this)) askPermissions() else Ui.showRestrictedHelp(this)
@@ -35,6 +40,13 @@ class MainActivity : AppCompatActivity() {
 
     private val permLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh() }
+
+    private val pickContact =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+            Ui.phoneFromPick(this, r.data?.data)?.let { n ->
+                startActivity(ConversationActivity.intent(this, n))
+            }
+        }
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) = refresh()
@@ -58,9 +70,7 @@ class MainActivity : AppCompatActivity() {
 
         b.btnDefault.setOnClickListener { requestDefault() }
         b.btnHelp.setOnClickListener { Ui.showRestrictedHelp(this) }
-        b.fabNew.setOnClickListener {
-            Ui.askNumber(this, onOk = { n -> startActivity(ConversationActivity.intent(this, n)) })
-        }
+        b.fabNew.setOnClickListener { newMessage() }
     }
 
     override fun onResume() {
@@ -79,10 +89,27 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
+        (menu.findItem(R.id.action_search)?.actionView as? SearchView)?.apply {
+            queryHint = "이름·번호·내용 검색"
+            setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(text: String?): Boolean {
+                    clearFocus()
+                    return true
+                }
+
+                override fun onQueryTextChange(text: String?): Boolean {
+                    onSearchChanged(text.orEmpty())
+                    return true
+                }
+            })
+        }
         return true
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+        R.id.action_read_all -> {
+            markAllRead(); true
+        }
         R.id.action_blocked -> {
             startActivity(Intent(this, BlockedActivity::class.java)); true
         }
@@ -90,6 +117,28 @@ class MainActivity : AppCompatActivity() {
             Ui.showRestrictedHelp(this); true
         }
         else -> super.onOptionsItemSelected(item)
+    }
+
+    private fun newMessage() {
+        Ui.askNumber(
+            this,
+            onOk = { n -> startActivity(ConversationActivity.intent(this, n)) },
+            onPickContact = {
+                runCatching { pickContact.launch(Ui.pickPhoneIntent()) }
+                    .onFailure { Ui.toast(this, "연락처 앱을 열 수 없어요") }
+            }
+        )
+    }
+
+    private fun markAllRead() {
+        if (!Ui.isDefaultSmsApp(this)) {
+            Ui.toast(this, "기본 메시지 앱으로 설정해야 할 수 있어요")
+            return
+        }
+        Ui.load(this, { SmsRepo.markAllRead(this) }) { n ->
+            Ui.toast(this, if (n > 0) "${n}개를 읽음으로 표시했어요" else "안 읽은 문자가 없어요")
+            refresh()
+        }
     }
 
     private fun requestDefault() {
@@ -126,13 +175,47 @@ class MainActivity : AppCompatActivity() {
         if (missing.isNotEmpty()) permLauncher.launch(missing.toTypedArray())
     }
 
+    private fun onSearchChanged(text: String) {
+        query = text.trim()
+        if (query.isEmpty()) {
+            bodyMatches = emptySet()
+            applyFilter()
+            return
+        }
+        val q = query
+        Ui.load(this, { SmsRepo.searchThreadIds(this, q) }) { ids ->
+            if (q == query) {
+                bodyMatches = ids
+                applyFilter()
+            }
+        }
+    }
+
     private fun refresh() {
         val isDefault = Ui.isDefaultSmsApp(this)
         b.cardBanner.isVisible = !isDefault
         Ui.load(this, { SmsRepo.conversations(this) }) { list ->
-            adapter.submit(list)
-            b.tvEmpty.isVisible = list.isEmpty()
-            b.tvEmpty.text = if (isDefault) "대화가 없습니다" else "기본 메시지 앱으로 설정하면\n문자가 여기에 표시됩니다"
+            all = list
+            applyFilter()
+        }
+    }
+
+    private fun applyFilter() {
+        val q = query
+        val digits = BlockStore.normalize(q)
+        val shown = if (q.isEmpty()) all else all.filter { c ->
+            (c.name?.contains(q, ignoreCase = true) == true) ||
+                c.address.contains(q, ignoreCase = true) ||
+                (digits.isNotEmpty() && BlockStore.normalize(c.address).contains(digits)) ||
+                c.snippet.contains(q, ignoreCase = true) ||
+                c.threadId in bodyMatches
+        }
+        adapter.submit(shown)
+        b.tvEmpty.isVisible = shown.isEmpty()
+        b.tvEmpty.text = when {
+            q.isNotEmpty() -> "검색 결과가 없습니다"
+            Ui.isDefaultSmsApp(this) -> "대화가 없습니다"
+            else -> "기본 메시지 앱으로 설정하면\n문자가 여기에 표시됩니다"
         }
     }
 

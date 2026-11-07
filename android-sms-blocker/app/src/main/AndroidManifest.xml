@@ -76,6 +76,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- 답장 / 읽음 buttons on message notifications (internal only) -->
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:exported="false" />
+
         <!-- Sent / failed status for outgoing messages (internal only) -->
         <receiver
             android:name=".SmsSentReceiver"

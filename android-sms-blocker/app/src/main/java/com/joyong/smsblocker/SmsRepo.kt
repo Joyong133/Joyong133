@@ -1,6 +1,7 @@
 package com.joyong.smsblocker
 
 import android.Manifest
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
@@ -212,6 +213,42 @@ object SmsRepo {
             }
         }
     }
+
+    /** Threads with a message body containing [query]. */
+    fun searchThreadIds(ctx: Context, query: String): Set<Long> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptySet()
+        val out = HashSet<Long>()
+        runCatching {
+            ctx.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms.THREAD_ID),
+                "${Telephony.Sms.BODY} LIKE ? AND $NOT_DRAFT",
+                arrayOf("%$q%"),
+                null
+            )?.use { c -> while (c.moveToNext()) out.add(c.getLong(0)) }
+        }
+        return out
+    }
+
+    fun markAllRead(ctx: Context): Int =
+        runCatching {
+            ctx.contentResolver.update(
+                Telephony.Sms.CONTENT_URI,
+                ContentValues().apply {
+                    put(Telephony.Sms.READ, 1)
+                    put(Telephony.Sms.SEEN, 1)
+                },
+                "${Telephony.Sms.READ}=0", null
+            )
+        }.getOrDefault(0)
+
+    fun deleteMessage(ctx: Context, id: Long): Int =
+        runCatching {
+            ctx.contentResolver.delete(
+                ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, id), null, null
+            )
+        }.getOrDefault(0)
 
     fun contactName(ctx: Context, address: String): String? {
         if (address.isBlank()) return null
