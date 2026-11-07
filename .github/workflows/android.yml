@@ -16,8 +16,8 @@ jobs:
       run:
         working-directory: android-sms-blocker
     env:
-      # The keystore file itself is the secret (repository secret ANSIM_KEYSTORE,
-      # base64). These only unlock it, so they can live here.
+      # These only unlock the keystore; the keystore file itself is what must
+      # stay private (Actions cache, or the ANSIM_KEYSTORE secret).
       SIGNING_STORE_PASSWORD: ansim-message-key
       SIGNING_KEY_PASSWORD: ansim-message-key
       SIGNING_KEY_ALIAS: ansim
@@ -38,37 +38,45 @@ jobs:
       - name: Install SDK packages
         run: yes | sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
+      # The signing key is created once by CI and kept in the Actions cache
+      # (never in the repository), so every build is signed with the same key
+      # and new APKs install over the existing app. A repository secret
+      # ANSIM_KEYSTORE, if added later, takes priority.
+      - name: Restore signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.ansim-signing
+          key: ansim-signing-key-v1
+
       - name: Prepare signing key
         id: sign
         env:
           SECRET_KS: ${{ secrets.ANSIM_KEYSTORE }}
-          # Fallback if it was saved under Settings → Actions → *Variables* instead of Secrets.
-          VAR_KS: ${{ vars.ANSIM_KEYSTORE }}
         run: |
-          KS="$RUNNER_TEMP/ansim.p12"
-          # Diagnostics only: lengths, never the value.
-          echo "ANSIM_KEYSTORE secret length: ${#SECRET_KS} / variable length: ${#VAR_KS}"
-          ANSIM_KEYSTORE="${SECRET_KS:-$VAR_KS}"
-          if [ -z "$SECRET_KS" ] && [ -n "$VAR_KS" ]; then
-            echo "::warning::Using the ANSIM_KEYSTORE *variable*. Move it to Secrets when you can (variables are not encrypted)."
-          fi
-          if [ -n "$ANSIM_KEYSTORE" ]; then
-            printf '%s' "$ANSIM_KEYSTORE" | tr -d ' \r\n' | base64 -d > "$KS" || true
-            if ! keytool -list -keystore "$KS" -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" > /dev/null 2>&1; then
-              echo "::error::ANSIM_KEYSTORE is set but is not a valid key — it was probably cut off when copying. Paste the whole ANSIM_KEYSTORE.txt again."
-              exit 1
-            fi
-            echo "stable=true" >> "$GITHUB_OUTPUT"
+          CACHED="$HOME/.ansim-signing/ansim.p12"
+          valid() { keytool -list -keystore "$1" -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" > /dev/null 2>&1; }
+          if [ -n "$SECRET_KS" ]; then
+            KS="$RUNNER_TEMP/ansim-secret.p12"
+            printf '%s' "$SECRET_KS" | tr -d ' \r\n' | base64 -d > "$KS" || true
+            valid "$KS" || { echo "::error::ANSIM_KEYSTORE secret is not a valid key (cut off when copying?)."; exit 1; }
+            SOURCE=secret
+          elif [ -f "$CACHED" ] && valid "$CACHED"; then
+            KS="$CACHED"
+            SOURCE=cache
           else
-            # No saved key yet: sign with a throwaway key so the build still works.
-            # APKs from such builds can't update each other (uninstall first).
-            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias "$SIGNING_KEY_ALIAS" \
+            mkdir -p "$(dirname "$CACHED")"
+            rm -f "$CACHED"
+            keytool -genkeypair -keystore "$CACHED" -storetype PKCS12 -alias "$SIGNING_KEY_ALIAS" \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -storepass "$SIGNING_STORE_PASSWORD" -keypass "$SIGNING_KEY_PASSWORD" \
-              -dname "CN=Ansim Message (temporary)"
-            echo "stable=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::ANSIM_KEYSTORE secret is not set — this APK uses a temporary key and will not install over an existing copy."
+              -dname "CN=Ansim Message"
+            KS="$CACHED"
+            SOURCE=new
+            echo "::warning::Created a new signing key. Uninstall the old app once before installing this APK; later builds reuse this key."
           fi
+          echo "Signing key source: $SOURCE"
+          keytool -list -keystore "$KS" -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" 2>/dev/null | grep -i "SHA-256" || true
+          echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
           echo "SIGNING_STORE_FILE=$KS" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
@@ -90,7 +98,7 @@ jobs:
           name: 안심메시지 최신 APK
           body: |
             차단 번호·문구의 문자와 전화를 흔적 없이 막는 기본 SMS 앱. 아래 ansim-message.apk 를 받아 설치하세요.
-            ${{ steps.sign.outputs.stable == 'true' && '고정 서명 키로 빌드됨 — 기존 앱 위에 바로 업데이트됩니다.' || '임시 서명 키로 빌드됨 — 설치 전에 기존 앱을 지워야 합니다.' }}
+            ${{ steps.sign.outputs.source == 'new' && '새 서명 키로 처음 빌드됨 — 이번 한 번만 기존 앱을 지우고 설치하세요. 다음부터는 바로 업데이트됩니다.' || '고정 서명 키로 빌드됨 — 기존 앱 위에 바로 업데이트됩니다.' }}
             (Android 8.0+ · 설치 시 "출처를 알 수 없는 앱" 허용 필요)
           files: android-sms-blocker/ansim-message.apk
           make_latest: true
