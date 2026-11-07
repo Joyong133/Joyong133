@@ -4,3 +4,6 @@ dist/
 *.log
 test-shots/
 tools/nihongo/.cache/
+
+# locally downloaded APK builds (published via GitHub Releases)
+apk/
