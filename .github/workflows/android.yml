@@ -41,11 +41,23 @@ jobs:
       - name: Prepare signing key
         id: sign
         env:
-          ANSIM_KEYSTORE: ${{ secrets.ANSIM_KEYSTORE }}
+          SECRET_KS: ${{ secrets.ANSIM_KEYSTORE }}
+          # Fallback if it was saved under Settings → Actions → *Variables* instead of Secrets.
+          VAR_KS: ${{ vars.ANSIM_KEYSTORE }}
         run: |
           KS="$RUNNER_TEMP/ansim.p12"
+          # Diagnostics only: lengths, never the value.
+          echo "ANSIM_KEYSTORE secret length: ${#SECRET_KS} / variable length: ${#VAR_KS}"
+          ANSIM_KEYSTORE="${SECRET_KS:-$VAR_KS}"
+          if [ -z "$SECRET_KS" ] && [ -n "$VAR_KS" ]; then
+            echo "::warning::Using the ANSIM_KEYSTORE *variable*. Move it to Secrets when you can (variables are not encrypted)."
+          fi
           if [ -n "$ANSIM_KEYSTORE" ]; then
-            printf '%s' "$ANSIM_KEYSTORE" | tr -d ' \r\n' | base64 -d > "$KS"
+            printf '%s' "$ANSIM_KEYSTORE" | tr -d ' \r\n' | base64 -d > "$KS" || true
+            if ! keytool -list -keystore "$KS" -storepass "$SIGNING_STORE_PASSWORD" -alias "$SIGNING_KEY_ALIAS" > /dev/null 2>&1; then
+              echo "::error::ANSIM_KEYSTORE is set but is not a valid key — it was probably cut off when copying. Paste the whole ANSIM_KEYSTORE.txt again."
+              exit 1
+            fi
             echo "stable=true" >> "$GITHUB_OUTPUT"
           else
             # No saved key yet: sign with a throwaway key so the build still works.
