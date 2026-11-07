@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_call"
+        android:title="전화 걸기"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_block"
+        android:title="이 번호 차단"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_delete"
+        android:title="대화 삭제"
+        app:showAsAction="never" />
+</menu>

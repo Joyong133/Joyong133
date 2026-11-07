@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="surface">#121212</color>
+    <color name="bubble_in">#2A2D33</color>
+    <color name="bubble_out">#2F6BFF</color>
+    <color name="input_bg">#22252B</color>
+    <color name="banner_bg">#3A2E14</color>
+    <color name="banner_text">#FFD99A</color>
+    <color name="text_secondary">#9AA0A8</color>
+    <color name="divider">#1FFFFFFF</color>
+    <color name="error">#F28B82</color>
+</resources>

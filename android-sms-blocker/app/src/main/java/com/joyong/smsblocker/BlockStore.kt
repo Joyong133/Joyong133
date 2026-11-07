@@ -41,19 +41,32 @@ object BlockStore {
         prefs(ctx).edit().putStringSet(KEY_BLOCKED, set).apply()
     }
 
-    /** True if [sender] matches any blocked entry (exact or trailing-digits match). */
-    fun isBlocked(ctx: Context, sender: String): Boolean {
-        val s = normalize(sender)
-        if (s.isEmpty()) return false
-        for (raw in prefs(ctx).getStringSet(KEY_BLOCKED, emptySet())!!) {
-            val b = normalize(raw)
-            if (b.isEmpty()) continue
-            if (s == b) return true
-            // Forgive country-code differences: match on the last 8+ digits.
-            val min = minOf(s.length, b.length)
-            if (min >= 8 && (s.endsWith(b) || b.endsWith(s))) return true
+    /**
+     * Same number? Digits compared exactly, or on the trailing 8+ digits to
+     * forgive country-code differences (+82 10… vs 010…). Non-numeric sender
+     * names (e.g. "KT") compare case-insensitively.
+     */
+    fun matches(a: String, b: String): Boolean {
+        val x = normalize(a)
+        val y = normalize(b)
+        if (x.isEmpty() || y.isEmpty()) {
+            return x.isEmpty() && y.isEmpty() && a.isNotBlank() && a.trim().equals(b.trim(), ignoreCase = true)
         }
-        return false
+        if (x == y) return true
+        return minOf(x.length, y.length) >= 8 && (x.endsWith(y) || y.endsWith(x))
+    }
+
+    /** True if [sender] matches any blocked entry. */
+    fun isBlocked(ctx: Context, sender: String): Boolean {
+        if (sender.isBlank()) return false
+        return prefs(ctx).getStringSet(KEY_BLOCKED, emptySet())!!.any { matches(sender, it) }
+    }
+
+    /** Remove every blocked entry that matches [number]. */
+    fun unblockMatching(ctx: Context, number: String) {
+        val set = prefs(ctx).getStringSet(KEY_BLOCKED, emptySet())!!
+            .filterNot { matches(number, it) }.toSet()
+        prefs(ctx).edit().putStringSet(KEY_BLOCKED, set).apply()
     }
 
     fun logBlocked(ctx: Context, address: String, body: String, date: Long) {

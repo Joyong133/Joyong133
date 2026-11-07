@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_blocked"
+        android:title="차단 관리"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_help"
+        android:title="기본 앱 설정 도움말"
+        app:showAsAction="never" />
+</menu>
