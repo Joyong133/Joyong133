@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
         setSupportActionBar(b.toolbar)
+        BlockStore.purgeLegacyLog(this)
 
         adapter = ConversationAdapter(
             onClick = { c ->

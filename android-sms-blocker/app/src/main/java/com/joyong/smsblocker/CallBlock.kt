@@ -75,12 +75,7 @@ class CallBlockService : CallScreeningService() {
         }
         respondToCall(details, response)
 
-        if (block) {
-            BlockStore.logBlockedCall(
-                this, if (hidden) BlockStore.HIDDEN_NUMBER_LABEL else number, System.currentTimeMillis()
-            )
-            CallLogCleaner.schedule(this)
-        }
+        if (block) CallLogCleaner.schedule(this)
     }
 }
 

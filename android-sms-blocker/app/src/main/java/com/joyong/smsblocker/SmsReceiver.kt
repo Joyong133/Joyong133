@@ -27,9 +27,8 @@ class SmsReceiver : BroadcastReceiver() {
         val date = parts[0].timestampMillis.takeIf { it > 0 } ?: System.currentTimeMillis()
 
         if (BlockStore.isBlocked(context, sender)) {
-            // Drop it: do NOT write to the SMS provider. Keep a private record
-            // so the user can confirm blocking works, without it showing in any inbox.
-            BlockStore.logBlocked(context, sender, body, date)
+            // Drop it completely: not written to the SMS provider, no
+            // notification, and no copy kept anywhere — it simply never appears.
             return
         }
 

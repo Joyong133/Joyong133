@@ -12,12 +12,11 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.joyong.smsblocker.databinding.ActivityBlockedBinding
 
-/** Manage blocked numbers (SMS + calls), call blocking, and the hidden log. */
+/** Manage blocked numbers (SMS + calls) and call blocking. */
 class BlockedActivity : AppCompatActivity() {
 
     private lateinit var b: ActivityBlockedBinding
     private lateinit var blockedAdapter: BlockedAdapter
-    private val logAdapter = MessageAdapter()
 
     private val callRoleLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -56,8 +55,6 @@ class BlockedActivity : AppCompatActivity() {
         }
         b.rvBlocked.layoutManager = LinearLayoutManager(this)
         b.rvBlocked.adapter = blockedAdapter
-        b.rvLog.layoutManager = LinearLayoutManager(this)
-        b.rvLog.adapter = logAdapter
 
         b.btnAdd.setOnClickListener {
             val num = b.etNumber.text?.toString()?.trim().orEmpty()
@@ -77,17 +74,6 @@ class BlockedActivity : AppCompatActivity() {
 
         b.swHidden.setOnCheckedChangeListener { _, checked ->
             BlockStore.setBlockHidden(this, checked)
-        }
-
-        b.btnClearLog.setOnClickListener {
-            AlertDialog.Builder(this)
-                .setMessage("숨겨진 문자·전화 기록을 모두 지울까요?")
-                .setPositiveButton("지우기") { _, _ ->
-                    BlockStore.clearBlockedLog(this)
-                    refresh()
-                }
-                .setNegativeButton("취소", null)
-                .show()
         }
     }
 
@@ -131,12 +117,6 @@ class BlockedActivity : AppCompatActivity() {
         val blocked = BlockStore.getBlocked(this)
         blockedAdapter.submit(blocked)
         b.tvBlockedEmpty.isVisible = blocked.isEmpty()
-
-        val log = BlockStore.getHiddenLog(this)
-        logAdapter.submit(log)
-        b.tvLogTitle.text = "숨겨진 기록 (${log.size})"
-        b.tvLogEmpty.isVisible = log.isEmpty()
-        b.btnClearLog.isVisible = log.isNotEmpty()
     }
 
     private fun refreshCallCard() {
