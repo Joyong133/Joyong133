@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: android-sms-blocker
@@ -33,9 +35,23 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/ansim-message.apk
+
+      - name: Upload APK (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: sms-blocker-debug-apk
-          path: android-sms-blocker/app/build/outputs/apk/debug/app-debug.apk
+          path: android-sms-blocker/app/build/outputs/apk/debug/ansim-message.apk
           if-no-files-found: error
+
+      - name: Publish release (direct download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: 안심메시지 최신 APK
+          body: |
+            차단 번호 문자를 저장하지 않는 기본 SMS 앱. 아래 ansim-message.apk 를 받아 설치하세요.
+            (디버그 서명본 · Android 8.0+ · 설치 시 "출처를 알 수 없는 앱" 허용 필요)
+          files: android-sms-blocker/app/build/outputs/apk/debug/ansim-message.apk
+          make_latest: true
