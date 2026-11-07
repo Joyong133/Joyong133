@@ -117,16 +117,16 @@ object Ui {
      * "restricted" roles such as the default SMS app until the user allows
      * restricted settings for the app in App info.
      */
-    fun showRestrictedHelp(activity: Activity) {
+    fun showRestrictedHelp(activity: Activity, what: String = "기본 메시지 앱") {
         AlertDialog.Builder(activity)
-            .setTitle("기본 앱 설정이 막혔나요?")
+            .setTitle("설정이 막혔나요?")
             .setMessage(
                 "파일로 직접 설치한 앱은 안드로이드 보안 정책 때문에 '제한된 설정'을 먼저 허용해야 " +
-                    "기본 메시지 앱이 될 수 있어요.\n\n" +
+                    "${what}이 될 수 있어요.\n\n" +
                     "1. 아래 [앱 정보 열기]를 누르세요\n" +
                     "2. 오른쪽 위 ⋮ 메뉴 → '제한된 설정 허용'\n" +
-                    "3. 본인 인증 후 이 앱으로 돌아와 [기본 앱으로 설정]을 다시 누르세요\n\n" +
-                    "※ ⋮ 메뉴에 항목이 없으면, 이 앱에서 [기본 앱으로 설정]을 한 번 눌러 거부 안내를 본 뒤 다시 확인하세요."
+                    "3. 본인 인증 후 이 앱으로 돌아와 설정 버튼을 다시 누르세요\n\n" +
+                    "※ ⋮ 메뉴에 항목이 없으면, 이 앱에서 설정을 한 번 시도해 거부 안내를 본 뒤 다시 확인하세요."
             )
             .setPositiveButton("앱 정보 열기") { _, _ ->
                 activity.startActivity(

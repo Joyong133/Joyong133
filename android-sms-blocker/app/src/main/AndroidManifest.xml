@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.RECEIVE_MMS" />
     <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- allowBackup=false: blocked list and hidden-message log stay on this phone only -->
@@ -78,6 +80,22 @@
         <receiver
             android:name=".SmsSentReceiver"
             android:exported="false" />
+
+        <!-- Call blocking: the system asks this service about each incoming call before it rings -->
+        <service
+            android:name=".CallBlockService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SCREENING_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.CallScreeningService" />
+            </intent-filter>
+        </service>
+
+        <!-- Removes blocked callers from the call log shortly after a blocked call -->
+        <service
+            android:name=".CallLogCleanJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- "Respond via message" during an incoming call (required for the role) -->
         <service
