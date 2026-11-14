@@ -309,7 +309,15 @@ class ConversationActivity : AppCompatActivity() {
             if (address.isNotEmpty()) {
                 if (BlockStore.isBlocked(this, address)) {
                     BlockStore.unblockMatching(this, address)
-                    Ui.toast(this, "차단을 해제했습니다")
+                    val pattern = BlockStore.blockingPattern(this, address)
+                    if (pattern != null) {
+                        Ui.toast(
+                            this,
+                            "번호 패턴 '${BlockStore.patternLabel(pattern)}' 때문에 계속 차단돼요. ⋮ → 차단 관리에서 패턴을 지우세요."
+                        )
+                    } else {
+                        Ui.toast(this, "차단을 해제했습니다")
+                    }
                     updateBanner()
                     invalidateOptionsMenu()
                 } else {

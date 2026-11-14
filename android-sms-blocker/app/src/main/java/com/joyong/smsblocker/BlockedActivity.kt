@@ -12,12 +12,13 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.joyong.smsblocker.databinding.ActivityBlockedBinding
 
-/** Manage blocked numbers (SMS + calls), blocked keywords and call blocking. */
+/** Manage blocked numbers and number patterns (SMS + calls), blocked keywords and call blocking. */
 class BlockedActivity : AppCompatActivity() {
 
     private lateinit var b: ActivityBlockedBinding
     private lateinit var blockedAdapter: BlockedAdapter
     private lateinit var keywordAdapter: BlockedAdapter
+    private lateinit var patternAdapter: BlockedAdapter
 
     private val callRoleLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -80,10 +81,35 @@ class BlockedActivity : AppCompatActivity() {
             refresh()
         }
 
+        patternAdapter = BlockedAdapter(label = BlockStore::patternLabel) { raw ->
+            BlockStore.removePattern(this, raw)
+            refresh()
+        }
+        b.rvPatterns.layoutManager = LinearLayoutManager(this)
+        b.rvPatterns.adapter = patternAdapter
+
+        b.btnAddPattern.setOnClickListener {
+            val input = b.etPattern.text?.toString().orEmpty()
+            if (BlockStore.normalize(input).length < BlockStore.MIN_PATTERN_DIGITS) {
+                Ui.toast(this, "숫자 ${BlockStore.MIN_PATTERN_DIGITS}자리 이상 입력하세요 (예: 070)")
+                return@setOnClickListener
+            }
+            b.etPattern.setText("")
+            addPattern(input, b.cbPrefixOnly.isChecked)
+        }
+
         b.btnAdd.setOnClickListener {
             val num = b.etNumber.text?.toString()?.trim().orEmpty()
             if (num.isEmpty()) {
                 Ui.toast(this, "번호를 입력하세요")
+                return@setOnClickListener
+            }
+            // A short run of digits like "070" isn't a whole number: offer a pattern instead.
+            val digits = BlockStore.normalize(num)
+            val onlyDigits = num.all { it.isDigit() || it == '-' || it == ' ' }
+            if (onlyDigits && digits.length in BlockStore.MIN_PATTERN_DIGITS..6) {
+                b.etNumber.setText("")
+                askPatternMode(digits)
                 return@setOnClickListener
             }
             BlockStore.addBlocked(this, num)
@@ -124,6 +150,44 @@ class BlockedActivity : AppCompatActivity() {
         askCallLogPermission()
     }
 
+    private fun askPatternMode(digits: String) {
+        AlertDialog.Builder(this)
+            .setTitle("'$digits' 번호 패턴")
+            .setMessage("'$digits'는 전체 번호가 아니에요. 어떻게 차단할까요?")
+            .setPositiveButton("$digits 들어간 번호 모두") { _, _ -> addPattern(digits, prefixOnly = false) }
+            .setNeutralButton("$digits 로 시작만") { _, _ -> addPattern(digits, prefixOnly = true) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    /** Add a number pattern, clean the call log, and offer to delete matching stored messages. */
+    private fun addPattern(input: String, prefixOnly: Boolean) {
+        val raw = BlockStore.addPattern(this, input, prefixOnly) ?: return
+        val label = BlockStore.patternLabel(raw)
+        CallLogCleaner.cleanAsync(this)
+        refresh()
+        if (!Ui.isDefaultSmsApp(this)) {
+            Ui.toast(this, "'$label' 차단을 추가했어요")
+            return
+        }
+        Ui.load(this, { SmsRepo.countWhere(this) { BlockStore.patternMatches(it, raw) } }) { n ->
+            if (n == 0) {
+                Ui.toast(this, "'$label' 차단을 추가했어요")
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("'$label' 차단을 추가했어요")
+                    .setMessage("이미 받은 문자 중 이 패턴에 맞는 번호의 문자가 ${n}건 있어요. 대화 목록에서는 벌써 숨겨졌어요.\n\n휴대폰에서 아예 지울까요?")
+                    .setPositiveButton("지우기") { _, _ ->
+                        Ui.load(this, { SmsRepo.deleteWhere(this) { BlockStore.patternMatches(it, raw) } }) { d ->
+                            Ui.toast(this, "${d}건 삭제했어요")
+                        }
+                    }
+                    .setNegativeButton("그대로 두기", null)
+                    .show()
+            }
+        }
+    }
+
     private fun askCallLogPermission() {
         if (!CallBlock.logPermsGranted(this)) callLogPermLauncher.launch(CallBlock.LOG_PERMISSIONS)
     }
@@ -141,6 +205,10 @@ class BlockedActivity : AppCompatActivity() {
         val blocked = BlockStore.getBlocked(this)
         blockedAdapter.submit(blocked)
         b.tvBlockedEmpty.isVisible = blocked.isEmpty()
+
+        val patterns = BlockStore.getPatterns(this)
+        patternAdapter.submit(patterns)
+        b.tvPatternsEmpty.isVisible = patterns.isEmpty()
 
         val keywords = BlockStore.getKeywords(this)
         keywordAdapter.submit(keywords)

@@ -17,7 +17,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 100 + (ciRun ?: 0)
-        versionName = "1.3" + (ciRun?.let { ".$it" } ?: "")
+        versionName = "1.4" + (ciRun?.let { ".$it" } ?: "")
     }
 
     signingConfigs {

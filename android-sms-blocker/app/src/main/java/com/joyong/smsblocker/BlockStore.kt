@@ -3,14 +3,15 @@ package com.joyong.smsblocker
 import android.content.Context
 
 /**
- * Persists the blocked-number list (shared by SMS and calls) and blocked
- * keywords in this app's private SharedPreferences. Nothing from blocked
- * senders is ever stored.
+ * Persists blocked numbers and number patterns (shared by SMS and calls) and
+ * blocked keywords in this app's private SharedPreferences. Nothing from
+ * blocked senders is ever stored.
  */
 object BlockStore {
     private const val PREFS = "sms_blocker"
     private const val KEY_BLOCKED = "blocked_numbers"
     private const val KEY_KEYWORDS = "blocked_keywords"
+    private const val KEY_PATTERNS = "blocked_number_patterns"
     private const val KEY_LOG = "blocked_log"
     private const val KEY_CALL_LOG = "blocked_call_log"
     private const val KEY_BLOCK_HIDDEN = "block_hidden_numbers"
@@ -57,11 +58,63 @@ object BlockStore {
         return minOf(x.length, y.length) >= 8 && (x.endsWith(y) || y.endsWith(x))
     }
 
-    /** True if [sender] matches any blocked entry. */
+    /** True if [sender] matches any blocked number or any number pattern. */
     fun isBlocked(ctx: Context, sender: String): Boolean {
         if (sender.isBlank()) return false
-        return getSet(ctx, KEY_BLOCKED).any { matches(sender, it) }
+        return getSet(ctx, KEY_BLOCKED).any { matches(sender, it) } ||
+            blockingPattern(ctx, sender) != null
     }
+
+    // ---- number patterns: "070" blocks every number containing (or starting with) 070 ----
+    // Stored as "070" (anywhere in the number) or "^070" (only at the start).
+
+    private const val PREFIX_MARK = "^"
+    const val MIN_PATTERN_DIGITS = 3
+
+    /** Domestic digits: "+82 70-1234-5678" / "0082…" → "07012345678", so prefixes like 070 match. */
+    fun localDigits(number: String): String {
+        val t = number.trim()
+        val d = normalize(t)
+        val intl = when {
+            t.startsWith("+82") && d.startsWith("82") -> d.drop(2)
+            d.startsWith("0082") -> d.drop(4)
+            else -> return d
+        }
+        return if (intl.startsWith("0")) intl else "0$intl"
+    }
+
+    fun getPatterns(ctx: Context): List<String> =
+        getSet(ctx, KEY_PATTERNS).sortedBy { it.removePrefix(PREFIX_MARK) }
+
+    /** Adds a pattern and returns its stored form, or null if it has too few digits. */
+    fun addPattern(ctx: Context, input: String, prefixOnly: Boolean): String? {
+        val digits = normalize(input)
+        if (digits.length < MIN_PATTERN_DIGITS) return null
+        val raw = if (prefixOnly) PREFIX_MARK + digits else digits
+        putSet(ctx, KEY_PATTERNS, getSet(ctx, KEY_PATTERNS) + raw)
+        return raw
+    }
+
+    fun removePattern(ctx: Context, raw: String) {
+        putSet(ctx, KEY_PATTERNS, getSet(ctx, KEY_PATTERNS) - raw)
+    }
+
+    fun patternLabel(raw: String): String =
+        if (raw.startsWith(PREFIX_MARK)) "${raw.removePrefix(PREFIX_MARK)} · 앞자리"
+        else "$raw · 포함"
+
+    fun patternMatches(number: String, raw: String): Boolean {
+        val prefixOnly = raw.startsWith(PREFIX_MARK)
+        val p = raw.removePrefix(PREFIX_MARK)
+        if (p.length < MIN_PATTERN_DIGITS) return false
+        val n = localDigits(number)
+        if (n.isEmpty()) return false
+        return if (prefixOnly) n.startsWith(p) else n.contains(p)
+    }
+
+    /** The stored pattern that blocks [number], if any. */
+    fun blockingPattern(ctx: Context, number: String): String? =
+        getSet(ctx, KEY_PATTERNS).firstOrNull { patternMatches(number, it) }
 
     /** Remove every blocked entry that matches [number]. */
     fun unblockMatching(ctx: Context, number: String) {

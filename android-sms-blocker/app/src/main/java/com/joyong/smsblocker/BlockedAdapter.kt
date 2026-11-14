@@ -6,6 +6,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.joyong.smsblocker.databinding.ItemBlockedBinding
 
 class BlockedAdapter(
+    private val label: (String) -> String = { it },
     private val onDelete: (String) -> Unit
 ) : RecyclerView.Adapter<BlockedAdapter.VH>() {
 
@@ -28,7 +29,7 @@ class BlockedAdapter(
 
     override fun onBindViewHolder(holder: VH, position: Int) {
         val number = items[position]
-        holder.b.tvNumber.text = number
+        holder.b.tvNumber.text = label(number)
         holder.b.btnDelete.setOnClickListener { onDelete(number) }
     }
 

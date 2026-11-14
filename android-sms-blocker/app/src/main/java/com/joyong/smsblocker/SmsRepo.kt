@@ -186,6 +186,40 @@ object SmsRepo {
         return count
     }
 
+    /** IDs of stored messages whose address satisfies [match]. */
+    private fun idsWhere(ctx: Context, match: (String) -> Boolean): List<Long> {
+        val ids = mutableListOf<Long>()
+        runCatching {
+            ctx.contentResolver.query(
+                Telephony.Sms.CONTENT_URI,
+                arrayOf(Telephony.Sms._ID, Telephony.Sms.ADDRESS),
+                null, null, null
+            )?.use { c ->
+                val iI = c.getColumnIndexOrThrow(Telephony.Sms._ID)
+                val iA = c.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
+                while (c.moveToNext()) {
+                    val addr = c.getString(iA) ?: continue
+                    if (match(addr)) ids.add(c.getLong(iI))
+                }
+            }
+        }
+        return ids
+    }
+
+    fun countWhere(ctx: Context, match: (String) -> Boolean): Int = idsWhere(ctx, match).size
+
+    fun deleteWhere(ctx: Context, match: (String) -> Boolean): Int {
+        var removed = 0
+        for (id in idsWhere(ctx, match)) {
+            removed += runCatching {
+                ctx.contentResolver.delete(
+                    Telephony.Sms.CONTENT_URI, "${Telephony.Sms._ID}=?", arrayOf(id.toString())
+                )
+            }.getOrDefault(0)
+        }
+        return removed
+    }
+
     fun insertOutgoing(ctx: Context, address: String, body: String): Uri? =
         runCatching {
             ctx.contentResolver.insert(
