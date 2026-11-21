@@ -8,10 +8,7 @@ import android.net.Uri
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.provider.Telephony
-import android.text.InputType
 import android.text.format.DateUtils
-import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import java.util.Calendar
@@ -90,41 +87,6 @@ object Ui {
     }
 
     // ---- dialogs ----
-
-    /**
-     * Ask for a recipient. [onPickContact], if given, adds a "연락처" button;
-     * the caller launches the picker and handles the result.
-     */
-    fun askNumber(
-        activity: Activity,
-        title: String = "새 메시지",
-        onOk: (String) -> Unit,
-        onCancel: (() -> Unit)? = null,
-        onPickContact: (() -> Unit)? = null
-    ) {
-        val input = EditText(activity).apply {
-            inputType = InputType.TYPE_CLASS_PHONE
-            hint = "받는 사람 전화번호"
-        }
-        val pad = (20 * activity.resources.displayMetrics.density).toInt()
-        val box = FrameLayout(activity).apply {
-            setPadding(pad, pad / 2, pad, 0)
-            addView(input)
-        }
-        val builder = AlertDialog.Builder(activity)
-            .setTitle(title)
-            .setView(box)
-            .setPositiveButton("확인") { _, _ ->
-                val n = input.text.toString().trim()
-                if (n.isNotEmpty()) onOk(n) else onCancel?.invoke()
-            }
-            .setNegativeButton("취소") { _, _ -> onCancel?.invoke() }
-            .setOnCancelListener { onCancel?.invoke() }
-        if (onPickContact != null) {
-            builder.setNeutralButton("연락처") { _, _ -> onPickContact() }
-        }
-        builder.show()
-    }
 
     fun confirmBlock(activity: Activity, address: String, done: () -> Unit) {
         AlertDialog.Builder(activity)

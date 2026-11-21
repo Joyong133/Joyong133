@@ -312,6 +312,35 @@ object SmsRepo {
             )
         }.getOrDefault(0)
 
+    /** Contacts whose name or number matches what was typed (needs contacts permission). */
+    fun searchContacts(ctx: Context, query: String, limit: Int = 30): List<Suggestion> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS)
+            != PackageManager.PERMISSION_GRANTED
+        ) return emptyList()
+        val out = mutableListOf<Suggestion>()
+        runCatching {
+            val uri = Uri.withAppendedPath(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI, Uri.encode(q)
+            )
+            ctx.contentResolver.query(
+                uri,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                ),
+                null, null, null
+            )?.use { c ->
+                while (c.moveToNext() && out.size < limit) {
+                    val number = c.getString(1)?.trim().orEmpty()
+                    if (number.isNotEmpty()) out.add(Suggestion(c.getString(0), number))
+                }
+            }
+        }
+        return out
+    }
+
     fun contactName(ctx: Context, address: String): String? {
         if (address.isBlank()) return null
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS)

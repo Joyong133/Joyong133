@@ -41,13 +41,6 @@ class MainActivity : AppCompatActivity() {
     private val permLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh() }
 
-    private val pickContact =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-            Ui.phoneFromPick(this, r.data?.data)?.let { n ->
-                startActivity(ConversationActivity.intent(this, n))
-            }
-        }
-
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) = refresh()
     }
@@ -120,15 +113,9 @@ class MainActivity : AppCompatActivity() {
         else -> super.onOptionsItemSelected(item)
     }
 
+    /** Opens the chat screen in new-message mode (recipient typed at the top). */
     private fun newMessage() {
-        Ui.askNumber(
-            this,
-            onOk = { n -> startActivity(ConversationActivity.intent(this, n)) },
-            onPickContact = {
-                runCatching { pickContact.launch(Ui.pickPhoneIntent()) }
-                    .onFailure { Ui.toast(this, "연락처 앱을 열 수 없어요") }
-            }
-        )
+        startActivity(ConversationActivity.intent(this, ""))
     }
 
     private fun markAllRead() {

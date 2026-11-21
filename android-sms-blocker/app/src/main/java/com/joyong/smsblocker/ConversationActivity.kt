@@ -16,6 +16,7 @@ import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.view.Menu
 import android.view.MenuItem
+import android.view.WindowManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -62,14 +63,16 @@ class ConversationActivity : AppCompatActivity() {
     private var threadId = -1L
     private var resumed = false
 
-    /** Text waiting for a recipient picked from contacts (forwarding). */
-    private var forwardBody: String? = null
     private val pickContact =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-            val body = forwardBody ?: return@registerForActivityResult
-            forwardBody = null
-            Ui.phoneFromPick(this, r.data?.data)?.let { n -> forwardTo(n, body) }
+            Ui.phoneFromPick(this, r.data?.data)?.let { n -> chooseRecipient(n) }
         }
+
+    /** New-message mode: the recipient is typed at the top and the matching conversation shows live. */
+    private var composeMode = false
+    private var knownConversations: List<Conversation> = emptyList()
+    private var suggestQuery = ""
+    private val suggestAdapter = SuggestionAdapter { s -> chooseRecipient(s.number) }
 
     private val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) = load()
@@ -90,6 +93,14 @@ class ConversationActivity : AppCompatActivity() {
             runCatching { pickFile.launch("*/*") }.onFailure { Ui.toast(this, "파일을 고를 수 없어요") }
         }
         b.btnAttachRemove.setOnClickListener { clearAttachment() }
+
+        b.rvSuggest.layoutManager = LinearLayoutManager(this)
+        b.rvSuggest.adapter = suggestAdapter
+        b.etRecipient.doAfterTextChanged { onRecipientChanged() }
+        b.btnPickContact.setOnClickListener {
+            runCatching { pickContact.launch(Ui.pickPhoneIntent()) }
+                .onFailure { Ui.toast(this, "연락처 앱을 열 수 없어요") }
+        }
 
         handleIntent(intent)
     }
@@ -116,11 +127,117 @@ class ConversationActivity : AppCompatActivity() {
             b.etMessage.setSelection(b.etMessage.length())
         }
 
-        if (addr.isEmpty()) {
-            Ui.askNumber(this, onOk = { n -> open(n) }, onCancel = { finish() })
-        } else {
-            open(addr)
+        if (addr.isEmpty()) enterCompose() else open(addr)
+    }
+
+    // ---- new message: recipient field at the top ----
+
+    private fun enterCompose() {
+        composeMode = true
+        address = ""
+        threadId = -1L
+        supportActionBar?.title = "새 메시지"
+        supportActionBar?.subtitle = null
+        b.recipientBar.isVisible = true
+        b.etRecipient.requestFocus()
+        window.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
+        showComposeHint()
+        Ui.load(this, { SmsRepo.conversations(this) }) { list ->
+            knownConversations = list
+            onRecipientChanged()
         }
+    }
+
+    private fun onRecipientChanged() {
+        if (!composeMode) return
+        val q = b.etRecipient.text?.toString()?.trim().orEmpty()
+        val digits = BlockStore.normalize(q)
+
+        // Already talked with this number? Show that conversation right away.
+        val match = if (digits.length >= 8) {
+            knownConversations.firstOrNull { BlockStore.matches(it.address, q) }
+        } else null
+        if (match != null) {
+            address = match.address
+            threadId = match.threadId
+            supportActionBar?.subtitle = match.name ?: match.address
+            b.tvComposeHint.isVisible = false
+            showSuggestions(emptyList())
+            updateBanner()
+            invalidateOptionsMenu()
+            load()
+            return
+        }
+
+        address = if (digits.length >= 3) q else ""
+        threadId = -1L
+        supportActionBar?.subtitle = null
+        adapter.submit(emptyList())
+        showComposeHint()
+        updateBanner()
+        invalidateOptionsMenu()
+
+        suggestQuery = q
+        if (q.isEmpty()) {
+            showSuggestions(emptyList())
+            return
+        }
+        val fromThreads = knownConversations.filter { c ->
+            c.name?.contains(q, ignoreCase = true) == true ||
+                (digits.isNotEmpty() && BlockStore.normalize(c.address).contains(digits))
+        }.map { Suggestion(it.name, it.address) }
+        showSuggestions(fromThreads)
+        Ui.load(this, { SmsRepo.searchContacts(this, q) }) { contacts ->
+            if (composeMode && suggestQuery == q) showSuggestions(mergeSuggestions(fromThreads, contacts))
+        }
+    }
+
+    private fun mergeSuggestions(a: List<Suggestion>, b2: List<Suggestion>): List<Suggestion> {
+        val seen = HashSet<String>()
+        return (a + b2).filter { s ->
+            val key = BlockStore.normalize(s.number).takeLast(10).ifEmpty { s.number }
+            seen.add(key)
+        }.take(30)
+    }
+
+    private fun showSuggestions(list: List<Suggestion>) {
+        suggestAdapter.submit(list)
+        b.rvSuggest.isVisible = list.isNotEmpty()
+    }
+
+    private fun showComposeHint() {
+        b.tvComposeHint.isVisible = true
+        b.tvComposeHint.text =
+            if (address.isEmpty()) "받는 사람 번호를 입력하세요" else "새 대화예요. 메시지를 입력해 보내세요"
+    }
+
+    /** Picked from suggestions or contacts: fill it in and move to the message box. */
+    private fun chooseRecipient(number: String) {
+        if (!composeMode) return
+        b.etRecipient.setText(number)
+        b.etRecipient.setSelection(b.etRecipient.length())
+        showSuggestions(emptyList())
+        b.etMessage.requestFocus()
+    }
+
+    /** Lock in the recipient when the first message is sent. */
+    private fun finishCompose(): Boolean {
+        val q = b.etRecipient.text?.toString()?.trim().orEmpty()
+        if (BlockStore.normalize(q).length < 3) {
+            Ui.toast(this, "받는 사람 번호를 입력하세요")
+            b.etRecipient.requestFocus()
+            return false
+        }
+        if (address.isEmpty()) address = q
+        composeMode = false
+        b.recipientBar.isVisible = false
+        b.tvComposeHint.isVisible = false
+        showSuggestions(emptyList())
+        supportActionBar?.subtitle = null
+        open(address)
+        return true
     }
 
     private fun open(addr: String) {
@@ -227,8 +344,9 @@ class ConversationActivity : AppCompatActivity() {
         val addr = address
         if (addr.isEmpty()) return
         Ui.load(this, {
-            if (threadId < 0) threadId = SmsRepo.threadIdFor(this, addr)
-            val msgs = SmsRepo.messages(this, threadId)
+            // While composing, only preview existing conversations; don't create a thread per keystroke.
+            if (threadId < 0 && !composeMode) threadId = SmsRepo.threadIdFor(this, addr)
+            val msgs = if (threadId < 0) emptyList() else SmsRepo.messages(this, threadId)
             // Only touch the provider when something is actually unread,
             // otherwise the update would re-trigger our own observer forever.
             if (Ui.isDefaultSmsApp(this) && msgs.any { !it.outgoing && !it.read }) {
@@ -258,7 +376,9 @@ class ConversationActivity : AppCompatActivity() {
     private fun send() {
         val text = b.etMessage.text?.toString()?.trim().orEmpty()
         val att = attachment
-        if ((text.isEmpty() && att == null) || address.isEmpty() || !canSend()) return
+        if (text.isEmpty() && att == null) return
+        if (composeMode && !finishCompose()) return
+        if (address.isEmpty() || !canSend()) return
         if (att != null || smsSegments(text) > 1) {
             // Files, and texts too long for one SMS (LMS), go out as MMS like on other Korean phones.
             sendMms(text, att)
@@ -322,22 +442,9 @@ class ConversationActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Open a new-message screen with the text ready; pick the recipient at the top. */
     private fun forward(body: String) {
-        Ui.askNumber(
-            this,
-            title = "전달",
-            onOk = { n -> forwardTo(n, body) },
-            onPickContact = {
-                forwardBody = body
-                runCatching { pickContact.launch(Ui.pickPhoneIntent()) }
-                    .onFailure { forwardBody = null; Ui.toast(this, "연락처 앱을 열 수 없어요") }
-            }
-        )
-    }
-
-    /** Open the recipient's conversation with the text ready to send. */
-    private fun forwardTo(number: String, body: String) {
-        startActivity(ConversationActivity.intent(this, number, body = body))
+        startActivity(ConversationActivity.intent(this, "", body = body))
     }
 
     private fun deleteMessage(m: ChatMsg) {
@@ -368,6 +475,7 @@ class ConversationActivity : AppCompatActivity() {
     }
 
     override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        for (i in 0 until menu.size()) menu.getItem(i).isVisible = address.isNotEmpty()
         val blocked = address.isNotEmpty() && BlockStore.isBlocked(this, address)
         menu.findItem(R.id.action_block)?.title = if (blocked) "차단 해제" else "이 번호 차단"
         return super.onPrepareOptionsMenu(menu)
