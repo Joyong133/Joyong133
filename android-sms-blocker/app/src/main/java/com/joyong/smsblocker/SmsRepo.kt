@@ -26,7 +26,10 @@ data class ChatMsg(
     val date: Long,
     val outgoing: Boolean,
     val status: Int,
-    val read: Boolean
+    val read: Boolean,
+    /** True for MMS (photos/files/long texts); [id] is then an MMS id. */
+    val mms: Boolean = false,
+    val parts: List<StoredPart> = emptyList()
 ) {
     companion object {
         const val SENT = 0
@@ -78,8 +81,24 @@ object SmsRepo {
                 }
             }
         }
+        // Merge MMS (photos, files, long texts) into the same threads.
+        val (mmsLatest, mmsUnread) = MmsStore.summaries(ctx, latest.mapValues { it.value.date })
+        for ((tid, m) in mmsLatest) {
+            latest[tid] = Conversation(
+                threadId = tid,
+                address = m.address.ifEmpty { latest[tid]?.address.orEmpty() },
+                name = null,
+                snippet = m.snippet,
+                date = m.date,
+                unread = 0,
+                lastOutgoing = m.outgoing
+            )
+        }
+        for ((tid, n) in mmsUnread) unread[tid] = (unread[tid] ?: 0) + n
+
         val names = HashMap<String, String?>()
         return latest.values
+            .sortedByDescending { it.date }
             // Safety net: never list a blocked sender, even for messages stored
             // before this app became the default SMS app.
             .filter { !BlockStore.isBlocked(ctx, it.address) }
@@ -131,7 +150,7 @@ object SmsRepo {
                 }
             }
         }
-        return out
+        return (out + MmsStore.messages(ctx, threadId)).sortedBy { it.date }
     }
 
     fun threadIdFor(ctx: Context, address: String): Long =
@@ -149,16 +168,22 @@ object SmsRepo {
                 arrayOf(threadId.toString())
             )
         }
+        MmsStore.markRead(ctx, threadId)
     }
 
+    /** Delete a whole conversation, SMS and MMS. */
     fun deleteThread(ctx: Context, threadId: Long): Int =
         runCatching {
             ctx.contentResolver.delete(
-                Telephony.Sms.CONTENT_URI,
-                "${Telephony.Sms.THREAD_ID}=?",
-                arrayOf(threadId.toString())
+                ContentUris.withAppendedId(Telephony.Threads.CONTENT_URI, threadId), null, null
             )
-        }.getOrDefault(0)
+        }.getOrElse {
+            runCatching {
+                ctx.contentResolver.delete(
+                    Telephony.Sms.CONTENT_URI, "${Telephony.Sms.THREAD_ID}=?", arrayOf(threadId.toString())
+                )
+            }.getOrDefault(0)
+        }
 
     /** Delete every stored message to/from a number (used when blocking it). */
     fun deleteFromAddress(ctx: Context, number: String): Int {
@@ -275,7 +300,10 @@ object SmsRepo {
                 },
                 "${Telephony.Sms.READ}=0", null
             )
-        }.getOrDefault(0)
+        }.getOrDefault(0) + MmsStore.markAllRead(ctx)
+
+    fun deleteMessage(m: ChatMsg, ctx: Context): Int =
+        if (m.mms) MmsStore.delete(ctx, m.id) else deleteMessage(ctx, m.id)
 
     fun deleteMessage(ctx: Context, id: Long): Int =
         runCatching {

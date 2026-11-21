@@ -17,7 +17,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 100 + (ciRun ?: 0)
-        versionName = "1.4" + (ciRun?.let { ".$it" } ?: "")
+        versionName = "1.5" + (ciRun?.let { ".$it" } ?: "")
     }
 
     signingConfigs {
@@ -63,4 +63,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+
+    testImplementation("junit:junit:4.13.2")
 }

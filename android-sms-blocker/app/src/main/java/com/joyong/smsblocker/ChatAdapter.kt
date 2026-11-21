@@ -2,7 +2,11 @@ package com.joyong.smsblocker
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import com.joyong.smsblocker.databinding.ItemDayBinding
 import com.joyong.smsblocker.databinding.ItemMsgInBinding
@@ -11,7 +15,8 @@ import com.joyong.smsblocker.databinding.ItemMsgOutBinding
 /** Chat bubbles (incoming left, outgoing right) with a date header per day. */
 class ChatAdapter(
     private val onLongPress: (ChatMsg) -> Unit,
-    private val onFailedTap: (ChatMsg) -> Unit
+    private val onFailedTap: (ChatMsg) -> Unit,
+    private val onOpenPart: (StoredPart) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private sealed class Row {
@@ -57,16 +62,20 @@ class ChatAdapter(
             is InVH -> {
                 val m = (rows[position] as Row.Bubble).m
                 holder.b.tvBody.text = m.body
+                holder.b.tvBody.isVisible = m.body.isNotEmpty()
                 holder.b.tvTime.text = Ui.bubbleTime(ctx, m.date)
                 holder.b.tvBody.setOnLongClickListener { onLongPress(m); true }
+                bindAttachments(holder.b.attachments, m)
             }
             is OutVH -> {
                 val m = (rows[position] as Row.Bubble).m
                 val failed = m.status == ChatMsg.FAILED
                 holder.b.tvBody.text = m.body
+                holder.b.tvBody.isVisible = m.body.isNotEmpty()
+                bindAttachments(holder.b.attachments, m)
                 holder.b.tvTime.text = when (m.status) {
                     ChatMsg.SENDING -> "전송 중…"
-                    ChatMsg.FAILED -> "전송 실패 · 눌러서 다시 보내기"
+                    ChatMsg.FAILED -> if (m.mms) "전송 실패" else "전송 실패 · 눌러서 다시 보내기"
                     else -> Ui.bubbleTime(ctx, m.date)
                 }
                 holder.b.tvTime.setTextColor(
@@ -74,7 +83,7 @@ class ChatAdapter(
                 )
                 holder.b.tvBody.alpha = if (failed) 0.6f else 1f
                 holder.b.tvBody.setOnLongClickListener { onLongPress(m); true }
-                if (failed) {
+                if (failed && !m.mms) {
                     holder.b.tvBody.setOnClickListener { onFailedTap(m) }
                     holder.b.tvTime.setOnClickListener { onFailedTap(m) }
                 } else {
@@ -82,6 +91,43 @@ class ChatAdapter(
                     holder.b.tvTime.setOnClickListener(null)
                 }
             }
+        }
+    }
+
+    /** Photos as thumbnails, other files as tappable "📎 name" chips. */
+    private fun bindAttachments(box: LinearLayout, m: ChatMsg) {
+        box.removeAllViews()
+        box.isVisible = m.parts.isNotEmpty()
+        val ctx = box.context
+        val dp = ctx.resources.displayMetrics.density
+        for (part in m.parts) {
+            val v = if (part.isImage) {
+                ImageView(ctx).apply {
+                    adjustViewBounds = true
+                    maxWidth = (220 * dp).toInt()
+                    maxHeight = (300 * dp).toInt()
+                    minimumWidth = (80 * dp).toInt()
+                    minimumHeight = (80 * dp).toInt()
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    contentDescription = "사진"
+                    MmsMedia.load(this, part.uri)
+                }
+            } else {
+                TextView(ctx).apply {
+                    text = "📎 ${part.name ?: "파일"}"
+                    textSize = 14f
+                    setBackgroundResource(R.drawable.bg_day)
+                    setPadding((12 * dp).toInt(), (8 * dp).toInt(), (12 * dp).toInt(), (8 * dp).toInt())
+                }
+            }
+            v.setOnClickListener { onOpenPart(part) }
+            v.setOnLongClickListener { onLongPress(m); true }
+            box.addView(
+                v,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = (4 * dp).toInt() }
+            )
         }
     }
 

@@ -47,8 +47,16 @@ class ConversationActivity : AppCompatActivity() {
     private lateinit var b: ActivityConversationBinding
     private val adapter = ChatAdapter(
         onLongPress = { m -> showMessageOptions(m) },
-        onFailedTap = { m -> resend(m) }
+        onFailedTap = { m -> resend(m) },
+        onOpenPart = { part -> MmsMedia.open(this, part) }
     )
+
+    /** File picked to send with the next message (MMS). */
+    private var attachment: Attachment? = null
+    private val pickFile =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri != null) prepareAttachment(uri)
+        }
     private var address = ""
     @Volatile
     private var threadId = -1L
@@ -78,6 +86,10 @@ class ConversationActivity : AppCompatActivity() {
         b.rvChat.adapter = adapter
         b.btnSend.setOnClickListener { send() }
         b.etMessage.doAfterTextChanged { updateCounter() }
+        b.btnAttach.setOnClickListener {
+            runCatching { pickFile.launch("*/*") }.onFailure { Ui.toast(this, "파일을 고를 수 없어요") }
+        }
+        b.btnAttachRemove.setOnClickListener { clearAttachment() }
 
         handleIntent(intent)
     }
@@ -135,6 +147,7 @@ class ConversationActivity : AppCompatActivity() {
         }
         runCatching {
             contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
+            contentResolver.registerContentObserver(Telephony.Mms.CONTENT_URI, true, observer)
         }
         updateBanner()
         invalidateOptionsMenu()
@@ -159,16 +172,55 @@ class ConversationActivity : AppCompatActivity() {
         b.tvBanner.text = text.orEmpty()
     }
 
-    /** "12자" or, when it will be split, "85자 · 2건". */
+    private fun smsSegments(text: String): Int =
+        runCatching { SmsMessage.calculateLength(text, false)[0] }.getOrDefault(1)
+
+    /** "12자", or "85자 · 장문(LMS)" when it won't fit in one SMS. */
     private fun updateCounter() {
         val text = b.etMessage.text?.toString().orEmpty()
         if (text.isEmpty()) {
             b.tvCounter.isVisible = false
             return
         }
-        val parts = runCatching { SmsMessage.calculateLength(text, false)[0] }.getOrDefault(1)
-        b.tvCounter.text = if (parts > 1) "${text.length}자 · ${parts}건으로 나눠 보내요" else "${text.length}자"
+        b.tvCounter.text = when {
+            attachment != null -> "${text.length}자 · 파일과 함께 MMS로 보내요"
+            smsSegments(text) > 1 -> "${text.length}자 · 장문(LMS)으로 보내요"
+            else -> "${text.length}자"
+        }
         b.tvCounter.isVisible = true
+    }
+
+    // ---- attachments ----
+
+    private fun prepareAttachment(uri: Uri) {
+        Ui.toast(this, "파일 준비 중…")
+        Ui.load(this, { MmsSender.prepareAttachment(this, uri) }) { (result, att) ->
+            when {
+                result == MmsSender.Result.OK && att != null -> setAttachment(att)
+                result == MmsSender.Result.TOO_LARGE -> Ui.toast(
+                    this, "파일이 너무 커요. 문자로 보낼 수 있는 크기는 약 ${MmsSender.maxMessageSize(this) / 1024}KB예요"
+                )
+                else -> Ui.toast(this, "파일을 불러올 수 없어요")
+            }
+        }
+    }
+
+    private fun setAttachment(a: Attachment) {
+        attachment = a
+        b.attachBar.isVisible = true
+        b.tvAttachName.text = "${a.name} · ${maxOf(1L, a.file.length() / 1024)}KB"
+        if (a.isImage) MmsMedia.load(b.ivAttachThumb, Uri.fromFile(a.file), 200)
+        else {
+            b.ivAttachThumb.tag = null
+            b.ivAttachThumb.setImageResource(R.drawable.ic_attach)
+        }
+        updateCounter()
+    }
+
+    private fun clearAttachment() {
+        attachment = null
+        b.attachBar.isVisible = false
+        updateCounter()
     }
 
     private fun load() {
@@ -205,9 +257,34 @@ class ConversationActivity : AppCompatActivity() {
 
     private fun send() {
         val text = b.etMessage.text?.toString()?.trim().orEmpty()
-        if (text.isEmpty() || address.isEmpty() || !canSend()) return
+        val att = attachment
+        if ((text.isEmpty() && att == null) || address.isEmpty() || !canSend()) return
+        if (att != null || smsSegments(text) > 1) {
+            // Files, and texts too long for one SMS (LMS), go out as MMS like on other Korean phones.
+            sendMms(text, att)
+        } else {
+            b.etMessage.setText("")
+            sendText(address, text)
+        }
+    }
+
+    private fun sendMms(text: String, att: Attachment?) {
         b.etMessage.setText("")
-        sendText(address, text)
+        clearAttachment()
+        val to = address
+        Ui.load(this, { MmsSender.send(this, to, text, listOfNotNull(att)) }) { result ->
+            if (result != MmsSender.Result.OK) {
+                // Give the message back so nothing typed is lost.
+                if (b.etMessage.text.isNullOrEmpty()) b.etMessage.setText(text)
+                if (att != null && attachment == null) setAttachment(att)
+                Ui.toast(
+                    this,
+                    if (result == MmsSender.Result.TOO_LARGE) "너무 커서 보낼 수 없어요 (최대 약 ${MmsSender.maxMessageSize(this) / 1024}KB)"
+                    else "전송에 실패했어요"
+                )
+            }
+            load()
+        }
     }
 
     private fun sendText(to: String, text: String) {
@@ -231,7 +308,8 @@ class ConversationActivity : AppCompatActivity() {
 
     private fun showMessageOptions(m: ChatMsg) {
         val options = mutableListOf("복사", "전달", "삭제")
-        if (m.outgoing && m.status == ChatMsg.FAILED) options.add(0, "다시 보내기")
+        if (m.outgoing && m.status == ChatMsg.FAILED && !m.mms) options.add(0, "다시 보내기")
+        if (m.body.isEmpty()) options.remove("복사")
         AlertDialog.Builder(this)
             .setItems(options.toTypedArray()) { _, which ->
                 when (options[which]) {
@@ -270,7 +348,7 @@ class ConversationActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setMessage("이 문자를 삭제할까요?")
             .setPositiveButton("삭제") { _, _ ->
-                SmsRepo.deleteMessage(this, m.id)
+                SmsRepo.deleteMessage(m, this)
                 load()
             }
             .setNegativeButton("취소", null)

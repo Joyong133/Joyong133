@@ -65,7 +65,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- MMS deliver (kept minimal; required for the role) -->
+        <!-- Incoming MMS notification (photos, files, long texts/LMS). Blocked senders are never downloaded. -->
         <receiver
             android:name=".MmsReceiver"
             android:exported="true"
@@ -75,6 +75,25 @@
                 <data android:mimeType="application/vnd.wap.mms-message" />
             </intent-filter>
         </receiver>
+
+        <!-- MMS download finished / MMS send finished (internal only) -->
+        <receiver
+            android:name=".MmsDownloadedReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".MmsSentReceiver"
+            android:exported="false" />
+
+        <!-- Hands MMS files to the phone's MMS service and attachments to viewer apps -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- 답장 / 읽음 buttons on message notifications (internal only) -->
         <receiver

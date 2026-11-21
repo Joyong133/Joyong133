@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Temporary files shared with the phone's MMS service / viewer apps. -->
+<paths>
+    <cache-path name="mms" path="mms/" />
+    <cache-path name="attach" path="attach/" />
+    <cache-path name="shared" path="shared/" />
+</paths>

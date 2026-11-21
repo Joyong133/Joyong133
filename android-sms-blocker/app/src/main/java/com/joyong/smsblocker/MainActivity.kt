@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         runCatching {
             contentResolver.registerContentObserver(Telephony.Sms.CONTENT_URI, true, observer)
+            contentResolver.registerContentObserver(Telephony.Mms.CONTENT_URI, true, observer)
         }
         if (Ui.isDefaultSmsApp(this) && !askedPermissions) askPermissions()
         refresh()

@@ -79,9 +79,9 @@ jobs:
           echo "source=$SOURCE" >> "$GITHUB_OUTPUT"
           echo "SIGNING_STORE_FILE=$KS" >> "$GITHUB_ENV"
 
-      - name: Build signed release APK
+      - name: Build signed release APK (after unit tests)
         run: |
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew testReleaseUnitTest assembleRelease --no-daemon --stacktrace
           cp app/build/outputs/apk/release/app-release.apk ansim-message.apk
 
       - name: Upload APK (artifact)
