@@ -11,6 +11,14 @@
     <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- See other messaging apps, to tell the user which one is currently the default -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+    </queries>
+
     <!-- allowBackup=false: blocked list and hidden-message log stay on this phone only -->
     <application
         android:allowBackup="false"

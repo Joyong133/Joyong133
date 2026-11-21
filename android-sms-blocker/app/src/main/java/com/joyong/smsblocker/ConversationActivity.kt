@@ -63,6 +63,16 @@ class ConversationActivity : AppCompatActivity() {
     private var threadId = -1L
     private var resumed = false
 
+    private val defaultLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            if (Ui.isDefaultSmsApp(this)) {
+                Ui.toast(this, "기본 메시지 앱으로 설정됐어요. 다시 보내 보세요")
+            } else {
+                Ui.showRestrictedHelp(this)
+            }
+            updateBanner()
+        }
+
     private val pickContact =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
             Ui.phoneFromPick(this, r.data?.data)?.let { n -> chooseRecipient(n) }
@@ -93,6 +103,7 @@ class ConversationActivity : AppCompatActivity() {
             runCatching { pickFile.launch("*/*") }.onFailure { Ui.toast(this, "파일을 고를 수 없어요") }
         }
         b.btnAttachRemove.setOnClickListener { clearAttachment() }
+        b.tvBanner.setOnClickListener { if (!Ui.isDefaultSmsApp(this)) showNotDefaultDialog() }
 
         b.rvSuggest.layoutManager = LinearLayoutManager(this)
         b.rvSuggest.adapter = suggestAdapter
@@ -280,7 +291,7 @@ class ConversationActivity : AppCompatActivity() {
 
     private fun updateBanner() {
         val text = when {
-            !Ui.isDefaultSmsApp(this) -> "기본 메시지 앱으로 설정해야 문자를 보낼 수 있어요."
+            !Ui.isDefaultSmsApp(this) -> "기본 메시지 앱이 아니라서 보낼 수 없어요. 여기를 눌러 설정하세요."
             address.isNotEmpty() && BlockStore.isBlocked(this, address) ->
                 "차단한 번호예요. 이 번호에서 오는 문자와 전화는 나타나지 않습니다."
             else -> null
@@ -361,7 +372,7 @@ class ConversationActivity : AppCompatActivity() {
 
     private fun canSend(): Boolean {
         if (!Ui.isDefaultSmsApp(this)) {
-            Ui.toast(this, "기본 메시지 앱으로 설정해야 보낼 수 있어요")
+            showNotDefaultDialog()
             return false
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS)
@@ -371,6 +382,25 @@ class ConversationActivity : AppCompatActivity() {
             return false
         }
         return true
+    }
+
+    /** Explain, show which app the phone treats as default, and offer to fix it right here. */
+    private fun showNotDefaultDialog() {
+        val current = Ui.currentDefaultSmsLabel(this)
+        AlertDialog.Builder(this)
+            .setTitle("기본 메시지 앱이 아니에요")
+            .setMessage(
+                "문자를 보내려면 안심메시지가 기본 메시지 앱이어야 해요.\n\n" +
+                    "지금 휴대폰이 알려주는 기본 메시지 앱: ${current ?: "없음"}\n\n" +
+                    "앱을 지웠다 다시 깔았다면 기본 앱 설정이 풀려요. 아래 버튼으로 다시 설정하세요."
+            )
+            .setPositiveButton("기본 앱으로 설정") { _, _ ->
+                runCatching { defaultLauncher.launch(Ui.defaultSmsRequestIntent(this)) }
+                    .onFailure { Ui.showRestrictedHelp(this) }
+            }
+            .setNeutralButton("설정이 안 돼요?") { _, _ -> Ui.showRestrictedHelp(this) }
+            .setNegativeButton("닫기", null)
+            .show()
     }
 
     private fun send() {

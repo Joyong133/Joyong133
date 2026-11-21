@@ -134,18 +134,8 @@ class MainActivity : AppCompatActivity() {
             askPermissions()
             return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val rm = getSystemService(RoleManager::class.java)
-            if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
-                roleLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_SMS))
-                return
-            }
-        }
-        @Suppress("DEPRECATION")
-        roleLauncher.launch(
-            Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
-                .putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, packageName)
-        )
+        runCatching { roleLauncher.launch(Ui.defaultSmsRequestIntent(this)) }
+            .onFailure { Ui.showRestrictedHelp(this) }
     }
 
     private fun askPermissions() {

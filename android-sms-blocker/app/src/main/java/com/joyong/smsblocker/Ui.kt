@@ -1,10 +1,12 @@
 package com.joyong.smsblocker
 
 import android.app.Activity
+import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.provider.Telephony
@@ -27,8 +29,42 @@ object Ui {
         }
     }
 
-    fun isDefaultSmsApp(ctx: Context): Boolean =
-        Telephony.Sms.getDefaultSmsPackage(ctx) == ctx.packageName
+    /**
+     * Are we the default SMS app? Asks both the SMS API and (Android 10+) the
+     * role system, since some phones answer one but not the other.
+     */
+    fun isDefaultSmsApp(ctx: Context): Boolean {
+        if (runCatching { Telephony.Sms.getDefaultSmsPackage(ctx) }.getOrNull() == ctx.packageName) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val held = runCatching {
+                ctx.getSystemService(RoleManager::class.java)?.isRoleHeld(RoleManager.ROLE_SMS)
+            }.getOrNull()
+            if (held == true) return true
+        }
+        return false
+    }
+
+    /** System screen that asks the user to make this app the default SMS app. */
+    fun defaultSmsRequestIntent(ctx: Context): Intent {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val rm = ctx.getSystemService(RoleManager::class.java)
+            if (rm != null && rm.isRoleAvailable(RoleManager.ROLE_SMS)) {
+                return rm.createRequestRoleIntent(RoleManager.ROLE_SMS)
+            }
+        }
+        @Suppress("DEPRECATION")
+        return Intent(Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT)
+            .putExtra(Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, ctx.packageName)
+    }
+
+    /** Name of the app the phone currently treats as default for SMS, if any. */
+    fun currentDefaultSmsLabel(ctx: Context): String? {
+        val pkg = runCatching { Telephony.Sms.getDefaultSmsPackage(ctx) }.getOrNull() ?: return null
+        return runCatching {
+            val pm = ctx.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+        }.getOrNull() ?: pkg
+    }
 
     fun toast(ctx: Context, msg: String) = Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
 
