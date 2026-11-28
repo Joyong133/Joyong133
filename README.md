@@ -230,3 +230,12 @@ runner/src/
 
 - 맵은 `runner/src/data/maps.js`에서 `b.straight(40)`, `b.curve(90, 20)`, `b.stones(6)`, `b.hammers(30, 2)` 같은 한 줄짜리 구간을 이어 붙여 만듭니다. 커브 각도의 합이 360°가 되게 하고, 직선 두 개에 `{ flex: 'a' }`, `{ flex: 'b' }`를 붙이면 코스가 출발선으로 정확히 돌아오도록 그 두 직선의 길이를 자동으로 맞춰 줍니다(`{ rise: 'close' }`는 높이를 맞춤). 마지막은 `b.close()`.
 - 테스트용 주소: `runner/?race=3&mode=item` 로 바로 3번 맵 아이템전에 들어가고, `&auto`를 붙이면 내 캐릭터도 봇이 대신 달립니다.
+
+---
+
+# 데이터 잠금 — 모바일 데이터를 잠그는 안드로이드 앱
+
+**시작**을 누르면 모바일 데이터를 켜도 인터넷이 연결되지 않고, 다시 풀려면 버튼을 **30초 동안 꾹** 눌러야 하는 안드로이드 앱입니다. 자동 해제 타이머, 허용할 앱, 기록과 통계, 빠른 설정 타일도 들어 있습니다.
+
+- 설치 파일: [`DataLock/release/DataLock-1.0.0.apk`](DataLock/release/DataLock-1.0.0.apk)
+- 설명과 빌드 방법: [DataLock/README.md](DataLock/README.md)

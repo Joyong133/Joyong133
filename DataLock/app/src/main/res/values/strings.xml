@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">데이터 잠금</string>
+    <string name="tile_label">데이터 잠금</string>
+    <string name="channel_status">차단 상태</string>
+    <string name="channel_status_desc">데이터를 막고 있는 동안 계속 표시돼요.</string>
+    <string name="channel_events">차단 알림</string>
+    <string name="channel_events_desc">타이머가 끝났거나 차단이 풀렸을 때 알려줘요.</string>
+</resources>
