@@ -58,12 +58,14 @@ object Notifications {
         val session = status.session
         val title = when {
             session == null -> context.getString(R.string.app_name)
+            status.needsPermission -> "차단이 멈춰 있어요 · 다시 연결 필요"
             status.onWifi && !status.engaged -> "Wi-Fi 사용 중 · 모바일 데이터 감시 중"
             session.mode == BlockMode.ALL_NETWORKS -> "인터넷 전체 차단 중"
             else -> "모바일 데이터 차단 중"
         }
         val text = when {
             session == null -> ""
+            status.needsPermission -> "눌러서 앱을 열고 VPN 연결을 다시 허용해 주세요. 차단은 끝나지 않았어요."
             status.onWifi && !status.engaged -> "모바일 데이터로 바뀌는 순간 바로 막아요."
             session.hasTimer -> "타이머가 끝나면 자동으로 풀려요. 지금 풀려면 앱에서 버튼을 30초 동안 꾹 누르세요."
             else -> "풀려면 앱에서 버튼을 30초 동안 꾹 누르세요."

@@ -1,5 +1,7 @@
 package io.github.joyong133.datalock.ui
 
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -27,10 +29,12 @@ import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -122,6 +126,7 @@ fun IdleScreen(
             ModeCard(settings.mode, onModeChange)
             TimerCard(settings.timerMinutes, onTimerChange)
             AllowedAppsCard(settings.allowedPackages, onOpenApps)
+            StrongLockCard()
             if (stats.sessions > 0) SummaryCard(stats, onOpenHistory)
             HowItWorksCard()
         }
@@ -307,6 +312,43 @@ private fun SummaryCard(stats: Stats, onOpenHistory: () -> Unit) {
             MiniStat("총 차단 시간", Format.duration(stats.totalMs), Modifier.weight(1f))
             MiniStat("차단 횟수", "${stats.sessions}회", Modifier.weight(1f))
             MiniStat("연속 기록", "${stats.streakDays}일", Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun StrongLockCard() {
+    val context = LocalContext.current
+    SectionCard(title = "더 강력하게 잠그기 (선택)", icon = Icons.Rounded.Shield) {
+        Text(
+            "안드로이드의 ‘항상 VPN 사용’과 ‘VPN 없이 연결 차단’을 이 앱에 켜 두면, 차단 중에는 VPN을 끄기 어려워지고 설령 꺼지더라도 안드로이드가 직접 데이터를 막아요.",
+            style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            "• 설정 > 네트워크 > VPN > ‘데이터 잠금’ 옆 톱니바퀴에서 두 가지를 모두 켜 주세요.\n" +
+                "• 이 모드에서는 ‘허용할 앱’ 예외가 동작하지 않고 모든 데이터가 막혀요.\n" +
+                "• 완전히 풀려면: 차단 화면에서 30초 꾹(세션 종료) + 이 설정에서 ‘항상 VPN 사용’ 끄기.",
+            style = MaterialTheme.typography.bodySmall.copy(lineBreak = LineBreak.Heading),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FilledTonalButton(onClick = { context.openVpnSettings() }) {
+            Text("VPN 설정 열기")
+        }
+    }
+}
+
+/** Opens Android's VPN settings so the user can turn on always-on and lockdown for this app. */
+private fun Context.openVpnSettings() {
+    val candidates = listOf(
+        Intent("android.settings.VPN_SETTINGS"),
+        Intent(android.provider.Settings.ACTION_SETTINGS),
+    )
+    for (intent in candidates) {
+        try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        } catch (_: android.content.ActivityNotFoundException) {
         }
     }
 }

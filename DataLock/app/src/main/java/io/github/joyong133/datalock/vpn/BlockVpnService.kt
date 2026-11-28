@@ -83,7 +83,13 @@ class BlockVpnService : VpnService() {
             shutdown()
             return START_NOT_STICKY
         }
-        val session = BlockState.status.value.session ?: Store.get(this).activeSession()
+        // A start whose action is not ACTION_RUN is the system starting us: a START_STICKY
+        // restart after a kill (null intent), or Android's always-on VPN. If always-on starts us
+        // with no session, begin a permanent block so "항상 VPN 사용" really blocks all the time.
+        val systemStarted = intent?.action != ACTION_RUN
+        val session = BlockState.status.value.session
+            ?: Store.get(this).activeSession()
+            ?: if (systemStarted) BlockController.beginAlwaysOn(this) else null
         if (session == null) {
             shutdown()
             return START_NOT_STICKY
@@ -107,13 +113,21 @@ class BlockVpnService : VpnService() {
 
     override fun onRevoke() {
         // Called on a binder thread when the VPN is switched off in system settings or another
-        // VPN app takes over. Respect it: the session ends and is recorded as interrupted.
+        // VPN app takes over. We do NOT treat one toggle as "give up" — the user's commitment
+        // stays. If we may still hold the VPN we re-assert the block at once; otherwise we keep
+        // the session and nag to reconnect. The deliberate way out stays the 30-second hold.
         main.post {
             disengage()
-            if (BlockState.status.value.session != null) {
-                BlockController.finishSession(this, EndReason.INTERRUPTED)
-            } else {
+            if (BlockState.status.value.session == null) {
                 shutdown()
+                return@post
+            }
+            val resume = applied
+            if (resume != null && prepare(this) == null) {
+                applied = null
+                apply(resume)
+            } else {
+                stopBlockingButKeepSession()
             }
         }
     }
@@ -189,8 +203,9 @@ class BlockVpnService : VpnService() {
             null
         }
         if (pfd == null) {
-            // Android no longer lets us hold the VPN (another VPN app took over).
-            BlockController.finishSession(this, EndReason.INTERRUPTED)
+            // Another VPN app took the slot, or consent was withdrawn. Don't end the commitment:
+            // keep the session and ask the user to reconnect (the 30-second hold still ends it).
+            stopBlockingButKeepSession()
             return
         }
         tunnel = Tunnel(pfd, BlockState.blockedCounter, ::onTunnelDied).also { it.start() }
@@ -225,6 +240,18 @@ class BlockVpnService : VpnService() {
         BlockState.update { it.copy(engaged = false) }
     }
 
+    /**
+     * We cannot block right now (consent withdrawn, or another VPN took over), but the session
+     * must survive so a single tap can't break the commitment. We keep running, mark that the
+     * user needs to reconnect, and nag. The 30-second hold is still the deliberate way out.
+     */
+    private fun stopBlockingButKeepSession() {
+        disengage()
+        BlockState.update { it.copy(engaged = false, needsPermission = true) }
+        Notifications.needsAttention(this)
+        Notifications.updateOngoing(this, BlockState.status.value)
+    }
+
     /** The interface died on its own; bring it back unless that keeps happening. */
     private fun onTunnelDied(dead: Tunnel) {
         main.post {
@@ -237,7 +264,8 @@ class BlockVpnService : VpnService() {
                 recentRestarts.removeFirst()
             }
             if (recentRestarts.size > 3) {
-                BlockController.finishSession(this, EndReason.INTERRUPTED)
+                // The interface keeps dying; stop the hot loop but keep the session alive.
+                stopBlockingButKeepSession()
                 return@post
             }
             val session = applied ?: return@post

@@ -39,6 +39,36 @@ object BlockController {
     }
 
     /**
+     * Begins a permanent (no-timer) session from the current settings, for when Android's
+     * "always-on VPN" starts the service with nothing already running. It does not launch the
+     * service (the caller is the service) and sets no timer, so the block stays until the user
+     * ends it with the 30-second hold and turns always-on off.
+     */
+    fun beginAlwaysOn(context: Context): ActiveSession {
+        BlockState.status.value.session?.let { return it }
+        val store = Store.get(context)
+        store.activeSession()?.let { existing ->
+            BlockState.blockedCounter.set(store.sessionBlockedCount)
+            BlockState.update { it.copy(session = existing, needsPermission = false) }
+            return existing
+        }
+        val settings = store.settings.value
+        val session = ActiveSession(
+            startedAt = System.currentTimeMillis(),
+            endsAt = 0L,
+            mode = settings.mode,
+            allowedPackages = settings.allowedPackages,
+        )
+        store.saveActiveSession(session)
+        BlockState.blockedCounter.set(0)
+        BlockState.update {
+            it.copy(session = session, blockedAttempts = 0, needsPermission = false, engaged = false, onWifi = false)
+        }
+        BlockTileService.requestRefresh(context)
+        return session
+    }
+
+    /**
      * Brings blocking back for a session that is still supposed to run: after a reboot, an app
      * update, or the app being killed. Returns true when blocking is (or keeps) running.
      */

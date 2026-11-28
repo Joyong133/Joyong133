@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import io.github.joyong133.datalock.core.ActiveSession
 import io.github.joyong133.datalock.core.BlockMode
@@ -97,6 +99,21 @@ class ScreenshotTest {
             stats = stats,
             onStart = {}, onModeChange = {}, onTimerChange = {}, onOpenApps = {}, onOpenHistory = {},
         )
+    }
+
+    @Test
+    fun idleStrongLock() {
+        compose.setContent {
+            DataLockTheme {
+                IdleScreen(
+                    settings = Settings(BlockMode.MOBILE_ONLY, 60, setOf("com.kakao.talk")),
+                    stats = stats,
+                    onStart = {}, onModeChange = {}, onTimerChange = {}, onOpenApps = {}, onOpenHistory = {},
+                )
+            }
+        }
+        compose.onNodeWithText("VPN 설정 열기").performScrollTo()
+        capture("13_strong_lock")
     }
 
     @Test
