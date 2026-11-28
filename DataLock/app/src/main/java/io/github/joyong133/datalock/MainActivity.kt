@@ -18,6 +18,7 @@ import io.github.joyong133.datalock.core.BlockController
 import io.github.joyong133.datalock.core.BlockState
 import io.github.joyong133.datalock.core.EndReason
 import io.github.joyong133.datalock.core.Store
+import io.github.joyong133.datalock.guard.GuardService
 import io.github.joyong133.datalock.ui.DataLockActions
 import io.github.joyong133.datalock.ui.DataLockRoot
 import io.github.joyong133.datalock.ui.theme.DataLockTheme
@@ -110,6 +111,8 @@ class MainActivity : ComponentActivity(), DataLockActions {
             return
         }
         try {
+            // Our own consent dialog must not be closed by the guard.
+            GuardService.allowOwnConsentDialog()
             vpnConsent.launch(consent)
         } catch (_: ActivityNotFoundException) {
             pending = Pending.NONE

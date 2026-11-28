@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EmojiEvents
@@ -64,6 +65,8 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import io.github.joyong133.datalock.guard.GuardService
 import io.github.joyong133.datalock.core.BlockMode
 import io.github.joyong133.datalock.core.Format
 import io.github.joyong133.datalock.core.Settings
@@ -126,6 +129,7 @@ fun IdleScreen(
             ModeCard(settings.mode, onModeChange)
             TimerCard(settings.timerMinutes, onTimerChange)
             AllowedAppsCard(settings.allowedPackages, onOpenApps)
+            GuardCard()
             StrongLockCard()
             if (stats.sessions > 0) SummaryCard(stats, onOpenHistory)
             HowItWorksCard()
@@ -312,6 +316,49 @@ private fun SummaryCard(stats: Stats, onOpenHistory: () -> Unit) {
             MiniStat("총 차단 시간", Format.duration(stats.totalMs), Modifier.weight(1f))
             MiniStat("차단 횟수", "${stats.sessions}회", Modifier.weight(1f))
             MiniStat("연속 기록", "${stats.streakDays}일", Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun GuardCard() {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(GuardService.isEnabled(context)) }
+    LifecycleResumeEffect(Unit) {
+        enabled = GuardService.isEnabled(context)
+        onPauseOrDispose { }
+    }
+    SectionCard(
+        title = "VPN 설정 잠그기",
+        icon = Icons.Rounded.AdminPanelSettings,
+        trailing = {
+            Text(
+                if (enabled) "켜짐" else "꺼짐",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+        },
+    ) {
+        Text(
+            if (enabled) {
+                "차단 중에 VPN 설정 화면, 알림창의 VPN 연결 끊기 창, 다른 VPN 앱이 열리면 바로 닫아요."
+            } else {
+                "‘차단 지킴이’를 켜 두면 차단 중에 VPN 설정 화면, 알림창의 VPN 연결 끊기 창, 다른 VPN 앱이 열리자마자 닫혀서 VPN을 끄거나 다른 VPN으로 바꿀 수 없어요."
+            },
+            style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!enabled) {
+            Text(
+                "1. 아래 ‘접근성 설정 열기’ → 설치된 앱 → ‘데이터 잠금 차단 지킴이’ 켜기\n" +
+                    "2. ‘제한된 설정’이라고 막히면: ‘앱 정보 열기’ → 오른쪽 위 ⋮ → ‘제한된 설정 허용’ 후 1번 다시",
+                style = MaterialTheme.typography.bodySmall.copy(lineBreak = LineBreak.Heading),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = { GuardService.openSettings(context) }) { Text("접근성 설정 열기") }
+                TextButton(onClick = { GuardService.openAppInfo(context) }) { Text("앱 정보 열기") }
+            }
         }
     }
 }

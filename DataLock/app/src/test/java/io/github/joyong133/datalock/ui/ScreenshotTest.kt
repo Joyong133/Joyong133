@@ -112,7 +112,7 @@ class ScreenshotTest {
                 )
             }
         }
-        compose.onNodeWithText("VPN 설정 열기").performScrollTo()
+        compose.onNodeWithText("접근성 설정 열기").performScrollTo()
         capture("13_strong_lock")
     }
 

@@ -22,6 +22,10 @@
         </intent>
         <!-- Google Play services can be allowed so push notifications keep arriving. -->
         <package android:name="com.google.android.gms" />
+        <!-- The guard recognises other VPN apps so it can close them during a session. -->
+        <intent>
+            <action android:name="android.net.VpnService" />
+        </intent>
     </queries>
 
     <application
@@ -81,6 +85,19 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".guard.GuardService"
+            android:exported="false"
+            android:label="@string/guard_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/guard_service" />
+        </service>
 
         <receiver
             android:name=".receiver.TimerReceiver"

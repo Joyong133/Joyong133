@@ -6,4 +6,6 @@
     <string name="channel_status_desc">데이터를 막고 있는 동안 계속 표시돼요.</string>
     <string name="channel_events">차단 알림</string>
     <string name="channel_events_desc">타이머가 끝났거나 차단이 풀렸을 때 알려줘요.</string>
+    <string name="guard_label">데이터 잠금 차단 지킴이</string>
+    <string name="guard_description">데이터 차단이 켜져 있는 동안에만 동작해요. VPN 설정 화면, VPN 연결 끊기 창, 다른 VPN 앱이 열리면 바로 닫아서 차단이 풀리지 않게 지켜요. 화면의 다른 내용은 읽거나 저장하지 않고, 어떤 정보도 밖으로 보내지 않아요. 차단이 꺼져 있을 때는 아무것도 하지 않아요.</string>
 </resources>
