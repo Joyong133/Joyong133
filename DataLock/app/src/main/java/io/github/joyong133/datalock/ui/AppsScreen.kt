@@ -209,7 +209,7 @@ private fun LockedBanner() {
         Icon(Icons.Rounded.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
         Spacer(Modifier.width(10.dp))
         Text(
-            "차단 중에는 바꿀 수 없어요. 30초 꾹 눌러 푼 다음에 바꿔 주세요.",
+            "차단 중에는 바꿀 수 없어요. 버튼을 꾹 눌러 푼 다음에 바꿔 주세요.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
             fontWeight = FontWeight.Medium,

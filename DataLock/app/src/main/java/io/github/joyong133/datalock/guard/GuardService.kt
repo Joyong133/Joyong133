@@ -12,6 +12,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import io.github.joyong133.datalock.R
+import io.github.joyong133.datalock.admin.DeviceAdmin
 import io.github.joyong133.datalock.core.BlockState
 
 /**
@@ -44,11 +45,18 @@ class GuardService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
 
+        // Uninstall-related screens are only guarded when the user turned on 삭제 방지 (device
+        // admin). Then, during a session, they can't uninstall or deactivate the admin.
+        val guardUninstall = DeviceAdmin.isActive(this)
+
         val reason = when {
             pkg == VPN_DIALOGS -> if (ownConsentAllowed()) null else "VPN 연결을 바꾸는 창은 차단 중에 열 수 없어요"
             pkg in settingsPackages && isOwnAccessibilityPage() -> "차단 중에는 차단 지킴이를 끌 수 없어요"
             pkg in settingsPackages && isVpnSettings(event) -> "차단 중에는 VPN 설정을 열 수 없어요"
             pkg !in session.allowedPackages && pkg in vpnApps() -> "차단 중에는 다른 VPN 앱을 쓸 수 없어요"
+            guardUninstall && pkg in installerPackages -> "차단 중에는 앱을 삭제할 수 없어요"
+            guardUninstall && pkg in settingsPackages && isDeviceAdminPage() -> "차단 중에는 기기 관리자를 끌 수 없어요"
+            guardUninstall && pkg in settingsPackages && isOwnAppInfoPage() -> "차단 중에는 이 앱 정보를 열 수 없어요"
             else -> null
         } ?: return
         kick(reason)
@@ -82,6 +90,20 @@ class GuardService : AccessibilityService() {
     private fun isOwnAccessibilityPage(): Boolean {
         val label = getString(R.string.guard_label).trim()
         return withTitle { hasTitle(it, depth = 0) { text -> text == label } }
+    }
+
+    /** The Settings page that lists / deactivates device administrators. */
+    private fun isDeviceAdminPage(): Boolean {
+        val label = getString(R.string.admin_label).trim()
+        return withTitle { node ->
+            hasTitle(node, 0) { it == label || it.contains("기기 관리", ignoreCase = true) || it.contains("device admin", ignoreCase = true) }
+        }
+    }
+
+    /** This app's own entry on the App info page, where the uninstall button lives. */
+    private fun isOwnAppInfoPage(): Boolean {
+        val appName = getString(R.string.app_name).trim()
+        return withTitle { node -> hasTitle(node, 0) { it == appName } }
     }
 
     private inline fun withTitle(check: (AccessibilityNodeInfo) -> Boolean): Boolean {
@@ -136,6 +158,12 @@ class GuardService : AccessibilityService() {
     companion object {
         private const val VPN_DIALOGS = "com.android.vpndialogs"
         private val settingsPackages = setOf("com.android.settings", "com.samsung.android.settings")
+        private val installerPackages = setOf(
+            "com.android.packageinstaller",
+            "com.google.android.packageinstaller",
+            "com.miui.packageinstaller",
+            "com.samsung.android.packageinstaller",
+        )
         private val TITLE_IDS = listOf("toolbar", "action_bar", "collapsing")
 
         /** Until when our own app may show Android's VPN consent dialog ("다시 연결"). */

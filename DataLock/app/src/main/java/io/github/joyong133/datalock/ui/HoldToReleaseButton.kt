@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.github.joyong133.datalock.core.Format
 import io.github.joyong133.datalock.ui.theme.FocusColors
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -67,7 +68,6 @@ import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.sin
 
-const val HOLD_SECONDS = 30
 
 /**
  * The only way to stop blocking early: keep a finger on this button for 30 uninterrupted
@@ -77,24 +77,25 @@ const val HOLD_SECONDS = 30
  * animations off in Android's settings cannot shorten the hold.
  */
 @Composable
-fun HoldToReleaseButton(onCompleted: () -> Unit, modifier: Modifier = Modifier) {
+fun HoldToReleaseButton(holdSeconds: Int, onCompleted: () -> Unit, modifier: Modifier = Modifier) {
+    val holdLabel = Format.hold(holdSeconds)
     val view = LocalView.current
     var progress by remember { mutableFloatStateOf(0f) }
     var holding by remember { mutableStateOf(false) }
     var completed by remember { mutableStateOf(false) }
     var releasedEarly by remember { mutableStateOf(false) }
     val latestOnCompleted by rememberUpdatedState(onCompleted)
-    val secondsLeft by remember {
-        derivedStateOf { ceil((1f - progress) * HOLD_SECONDS).toInt().coerceIn(0, HOLD_SECONDS) }
+    val secondsLeft by remember(holdSeconds) {
+        derivedStateOf { ceil((1f - progress) * holdSeconds).toInt().coerceIn(0, holdSeconds) }
     }
 
-    LaunchedEffect(holding) {
+    LaunchedEffect(holding, holdSeconds) {
         if (holding) {
             releasedEarly = false
             val startedAt = SystemClock.elapsedRealtime()
             while (true) {
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
-                progress = (elapsed / (HOLD_SECONDS * 1_000f)).coerceAtMost(1f)
+                progress = (elapsed / (holdSeconds * 1_000f)).coerceAtMost(1f)
                 if (progress >= 1f) break
                 withFrameNanos { }
             }
@@ -133,7 +134,7 @@ fun HoldToReleaseButton(onCompleted: () -> Unit, modifier: Modifier = Modifier) 
             Modifier
                 .size(248.dp)
                 .semantics {
-                    contentDescription = "버튼을 30초 동안 길게 누르면 차단이 풀려요"
+                    contentDescription = "버튼을 $holdLabel 동안 길게 누르면 차단이 풀려요"
                     role = Role.Button
                 }
                 .pointerInput(Unit) {
@@ -248,7 +249,7 @@ fun HoldToReleaseButton(onCompleted: () -> Unit, modifier: Modifier = Modifier) 
                             tint = FocusColors.Text,
                             modifier = Modifier.size(40.dp),
                         )
-                        Text("30초 꾹", color = FocusColors.Text, fontSize = 24.dp.fixedSp(), fontWeight = FontWeight.Bold)
+                        Text("$holdLabel 꾹", color = FocusColors.Text, fontSize = 24.dp.fixedSp(), fontWeight = FontWeight.Bold)
                         Text("눌러서 해제", color = FocusColors.TextMuted, fontSize = 14.dp.fixedSp())
                     }
                 }
@@ -260,7 +261,7 @@ fun HoldToReleaseButton(onCompleted: () -> Unit, modifier: Modifier = Modifier) 
                 completed -> "데이터가 다시 연결돼요"
                 holding -> "손을 떼면 처음부터 다시 시작돼요"
                 releasedEarly -> "괜찮아요, 조금만 더 버텨 볼까요? 🙂"
-                else -> "버튼을 30초 동안 꾹 누르고 있으면 차단이 풀려요"
+                else -> "버튼을 $holdLabel 동안 꾹 누르고 있으면 차단이 풀려요"
             },
             color = FocusColors.TextMuted,
             style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),

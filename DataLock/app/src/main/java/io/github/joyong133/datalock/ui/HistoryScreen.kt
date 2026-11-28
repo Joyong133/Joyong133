@@ -179,7 +179,7 @@ private fun RecordRow(record: SessionRecord) {
     data class Badge(val text: String, val icon: ImageVector, val container: Color, val content: Color)
     val badge = when (record.reason) {
         EndReason.TIMER_DONE -> Badge("목표 달성", Icons.Rounded.EmojiEvents, scheme.primaryContainer, scheme.onPrimaryContainer)
-        EndReason.HOLD_RELEASE -> Badge("30초 꾹 해제", Icons.Rounded.TouchApp, scheme.secondaryContainer, scheme.onSecondaryContainer)
+        EndReason.HOLD_RELEASE -> Badge("꾹 눌러 해제", Icons.Rounded.TouchApp, scheme.secondaryContainer, scheme.onSecondaryContainer)
         EndReason.INTERRUPTED -> Badge("중간에 끊김", Icons.Rounded.WarningAmber, scheme.errorContainer, scheme.onErrorContainer)
     }
     val details = buildList {

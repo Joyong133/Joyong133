@@ -27,6 +27,7 @@ object BlockController {
             endsAt = if (settings.timerMinutes > 0) now + settings.timerMinutes * 60_000L else 0L,
             mode = settings.mode,
             allowedPackages = settings.allowedPackages,
+            holdSeconds = settings.holdSeconds,
         )
         store.saveActiveSession(session)
         BlockState.blockedCounter.set(0)
@@ -58,6 +59,7 @@ object BlockController {
             endsAt = 0L,
             mode = settings.mode,
             allowedPackages = settings.allowedPackages,
+            holdSeconds = settings.holdSeconds,
         )
         store.saveActiveSession(session)
         BlockState.blockedCounter.set(0)

@@ -29,6 +29,8 @@ class Store private constructor(context: Context) {
             putString(K_MODE, next.mode.name)
             putInt(K_TIMER, next.timerMinutes)
             putStringSet(K_ALLOWED, HashSet(next.allowedPackages))
+            putInt(K_HOLD, next.holdSeconds)
+            putBoolean(K_PREVENT_UNINSTALL, next.preventUninstall)
         }
     }
 
@@ -39,6 +41,7 @@ class Store private constructor(context: Context) {
             endsAt = prefs.getLong(K_S_END, 0L),
             mode = enumOr(prefs.getString(K_S_MODE, null), BlockMode.MOBILE_ONLY),
             allowedPackages = prefs.getStringSet(K_S_ALLOWED, null)?.toSet().orEmpty(),
+            holdSeconds = holdOrDefault(prefs.getInt(K_S_HOLD, DEFAULT_HOLD_SECONDS)),
         )
     }
 
@@ -50,6 +53,7 @@ class Store private constructor(context: Context) {
             putLong(K_S_END, session.endsAt)
             putString(K_S_MODE, session.mode.name)
             putStringSet(K_S_ALLOWED, HashSet(session.allowedPackages))
+            putInt(K_S_HOLD, session.holdSeconds)
             putLong(K_S_BLOCKED, 0L)
         }
     }
@@ -61,6 +65,7 @@ class Store private constructor(context: Context) {
             remove(K_S_END)
             remove(K_S_MODE)
             remove(K_S_ALLOWED)
+            remove(K_S_HOLD)
             remove(K_S_BLOCKED)
         }
     }
@@ -92,6 +97,8 @@ class Store private constructor(context: Context) {
         mode = enumOr(prefs.getString(K_MODE, null), BlockMode.MOBILE_ONLY),
         timerMinutes = prefs.getInt(K_TIMER, 0).coerceAtLeast(0),
         allowedPackages = prefs.getStringSet(K_ALLOWED, null)?.toSet().orEmpty(),
+        holdSeconds = holdOrDefault(prefs.getInt(K_HOLD, DEFAULT_HOLD_SECONDS)),
+        preventUninstall = prefs.getBoolean(K_PREVENT_UNINSTALL, false),
     )
 
     companion object {
@@ -100,6 +107,11 @@ class Store private constructor(context: Context) {
         private const val K_MODE = "mode"
         private const val K_TIMER = "timer_minutes"
         private const val K_ALLOWED = "allowed_packages"
+        private const val K_HOLD = "hold_seconds"
+        private const val K_PREVENT_UNINSTALL = "prevent_uninstall"
+        private const val K_S_HOLD = "session_hold_seconds"
+
+        private fun holdOrDefault(value: Int) = if (value in HOLD_CHOICES) value else DEFAULT_HOLD_SECONDS
         private const val K_ACTIVE = "session_active"
         private const val K_S_START = "session_start"
         private const val K_S_END = "session_end"

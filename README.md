@@ -237,5 +237,5 @@ runner/src/
 
 **시작**을 누르면 모바일 데이터를 켜도 인터넷이 연결되지 않고, 다시 풀려면 버튼을 **30초 동안 꾹** 눌러야 하는 안드로이드 앱입니다. 자동 해제 타이머, 허용할 앱, 기록과 통계, 빠른 설정 타일도 들어 있습니다.
 
-- 설치 파일: [`DataLock/release/DataLock-1.3.0.apk`](DataLock/release/DataLock-1.3.0.apk)
+- 설치 파일: [`DataLock/release/DataLock-1.4.0.apk`](DataLock/release/DataLock-1.4.0.apk)
 - 설명과 빌드 방법: [DataLock/README.md](DataLock/README.md)

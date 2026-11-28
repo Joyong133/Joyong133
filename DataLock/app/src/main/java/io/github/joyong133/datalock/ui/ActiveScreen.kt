@@ -126,7 +126,7 @@ fun ActiveScreen(
                 ReconnectCard(onReconnect)
             }
             Spacer(Modifier.weight(1f).heightIn(min = 24.dp))
-            HoldToReleaseButton(onCompleted = onRelease)
+            HoldToReleaseButton(holdSeconds = session.holdSeconds, onCompleted = onRelease)
             Spacer(Modifier.weight(1f).heightIn(min = 24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FocusStat(

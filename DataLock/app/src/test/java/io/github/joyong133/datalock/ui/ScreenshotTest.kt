@@ -97,7 +97,9 @@ class ScreenshotTest {
         IdleScreen(
             settings = Settings(BlockMode.MOBILE_ONLY, 60, setOf("com.kakao.talk", "viva.republica.toss")),
             stats = stats,
-            onStart = {}, onModeChange = {}, onTimerChange = {}, onOpenApps = {}, onOpenHistory = {},
+            onStart = {}, onModeChange = {}, onTimerChange = {}, onHoldChange = {},
+                    sessionActive = false, onEnableUninstallProtection = {}, onDisableUninstallProtection = {},
+                    onOpenApps = {}, onOpenHistory = {},
         )
     }
 
@@ -108,11 +110,13 @@ class ScreenshotTest {
                 IdleScreen(
                     settings = Settings(BlockMode.MOBILE_ONLY, 60, setOf("com.kakao.talk")),
                     stats = stats,
-                    onStart = {}, onModeChange = {}, onTimerChange = {}, onOpenApps = {}, onOpenHistory = {},
+                    onStart = {}, onModeChange = {}, onTimerChange = {}, onHoldChange = {},
+                    sessionActive = false, onEnableUninstallProtection = {}, onDisableUninstallProtection = {},
+                    onOpenApps = {}, onOpenHistory = {},
                 )
             }
         }
-        compose.onNodeWithText("접근성 설정 열기").performScrollTo()
+        compose.onNodeWithText("삭제 방지 켜기").performScrollTo()
         capture("13_strong_lock")
     }
 
@@ -121,7 +125,9 @@ class ScreenshotTest {
         IdleScreen(
             settings = Settings(BlockMode.ALL_NETWORKS, 0, emptySet()),
             stats = StatsCalculator.compute(emptyList(), now),
-            onStart = {}, onModeChange = {}, onTimerChange = {}, onOpenApps = {}, onOpenHistory = {},
+            onStart = {}, onModeChange = {}, onTimerChange = {}, onHoldChange = {},
+                    sessionActive = false, onEnableUninstallProtection = {}, onDisableUninstallProtection = {},
+                    onOpenApps = {}, onOpenHistory = {},
         )
     }
 

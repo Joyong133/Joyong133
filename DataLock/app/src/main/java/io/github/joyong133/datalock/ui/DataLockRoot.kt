@@ -50,6 +50,8 @@ interface DataLockActions {
     fun startBlocking()
     fun reconnect()
     fun releaseByHold()
+    fun enableUninstallProtection()
+    fun disableUninstallProtection()
 }
 
 private enum class Screen { HOME, APPS, HISTORY }
@@ -124,6 +126,10 @@ fun DataLockRoot(
                     onStart = { requestStart() },
                     onModeChange = { mode -> store.updateSettings { it.copy(mode = mode) } },
                     onTimerChange = { minutes -> store.updateSettings { it.copy(timerMinutes = minutes) } },
+                    onHoldChange = { seconds -> store.updateSettings { it.copy(holdSeconds = seconds) } },
+                    sessionActive = active,
+                    onEnableUninstallProtection = actions::enableUninstallProtection,
+                    onDisableUninstallProtection = actions::disableUninstallProtection,
                     onOpenApps = { screen = Screen.APPS },
                     onOpenHistory = { screen = Screen.HISTORY },
                 )
@@ -180,7 +186,7 @@ internal fun IntroDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                 Text("데이터를 막기 위해 안드로이드의 VPN 기능을 써요. 다음 화면에서 '확인'을 눌러 주세요.")
                 Text("• 실제 VPN 서버에 연결하지 않아요. 모든 연결은 휴대폰 안에서 막히고, 어떤 데이터도 밖으로 나가지 않아요.")
                 Text("• 차단 중에는 화면 위쪽에 열쇠 모양 VPN 아이콘이 보여요.")
-                Text("• 풀려면 버튼을 30초 동안 꾹 눌러야 해요.")
+                Text("• 풀려면 버튼을 정해 둔 시간(30초 또는 1분) 동안 꾹 눌러야 해요.")
             }
         },
         confirmButton = { TextButton(onClick = onConfirm) { Text("계속") } },

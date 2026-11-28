@@ -45,6 +45,9 @@ object Format {
         else -> "${minutes}분"
     }
 
+    /** Hold length: "30초", "1분". */
+    fun hold(seconds: Int): String = if (seconds % 60 == 0) "${seconds / 60}분" else "${seconds}초"
+
     /** "1,234". */
     fun count(value: Long): String = NumberFormat.getIntegerInstance(Locale.KOREA).format(value)
 

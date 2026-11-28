@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import io.github.joyong133.datalock.core.BlockController
 import io.github.joyong133.datalock.core.BlockState
 import io.github.joyong133.datalock.core.EndReason
+import io.github.joyong133.datalock.admin.DeviceAdmin
 import io.github.joyong133.datalock.core.Store
 import io.github.joyong133.datalock.guard.GuardService
 import io.github.joyong133.datalock.ui.DataLockActions
@@ -48,6 +49,15 @@ class MainActivity : ComponentActivity(), DataLockActions {
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { runPending() }
+
+    private val deviceAdminConsent =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val on = DeviceAdmin.isActive(this)
+            Store.get(this).updateSettings { it.copy(preventUninstall = on) }
+            messages.trySend(
+                if (on) "삭제 방지가 켜졌어요. 차단 중에는 앱을 삭제할 수 없어요." else "삭제 방지를 켜지 않았어요.",
+            )
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -98,6 +108,25 @@ class MainActivity : ComponentActivity(), DataLockActions {
 
     override fun releaseByHold() {
         BlockController.finishSession(this, EndReason.HOLD_RELEASE)
+    }
+
+    override fun enableUninstallProtection() {
+        if (DeviceAdmin.isActive(this)) return
+        try {
+            deviceAdminConsent.launch(DeviceAdmin.requestIntent(this))
+        } catch (_: ActivityNotFoundException) {
+            messages.trySend("이 휴대폰에서는 삭제 방지 기능을 쓸 수 없어요.")
+        }
+    }
+
+    override fun disableUninstallProtection() {
+        // Only allowed while nothing is blocking; the UI hides the button during a session.
+        if (BlockState.status.value.session != null) {
+            messages.trySend("차단 중에는 삭제 방지를 끌 수 없어요.")
+            return
+        }
+        DeviceAdmin.remove(this)
+        Store.get(this).updateSettings { it.copy(preventUninstall = false) }
     }
 
     private fun handleIntent(intent: Intent?) {

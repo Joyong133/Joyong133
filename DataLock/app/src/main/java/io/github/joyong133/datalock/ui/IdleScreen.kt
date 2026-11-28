@@ -29,10 +29,12 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -66,13 +68,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import io.github.joyong133.datalock.admin.DeviceAdmin
 import io.github.joyong133.datalock.guard.GuardService
 import io.github.joyong133.datalock.core.BlockMode
 import io.github.joyong133.datalock.core.Format
+import io.github.joyong133.datalock.core.HOLD_CHOICES
 import io.github.joyong133.datalock.core.Settings
 import io.github.joyong133.datalock.core.Stats
 
-private val TIMER_PRESETS = listOf(0, 1, 30, 60, 120, 240, 480)
+private val TIMER_PRESETS = listOf(0, 30, 60, 120, 240, 480)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +86,10 @@ fun IdleScreen(
     onStart: () -> Unit,
     onModeChange: (BlockMode) -> Unit,
     onTimerChange: (Int) -> Unit,
+    onHoldChange: (Int) -> Unit,
+    sessionActive: Boolean,
+    onEnableUninstallProtection: () -> Unit,
+    onDisableUninstallProtection: () -> Unit,
     onOpenApps: () -> Unit,
     onOpenHistory: () -> Unit,
 ) {
@@ -117,9 +125,9 @@ fun IdleScreen(
             )
             Text(
                 if (settings.mode == BlockMode.MOBILE_ONLY) {
-                    "모바일 데이터를 켜도 인터넷이 연결되지 않아요.\n풀려면 버튼을 30초 동안 꾹 눌러야 해요."
+                    "모바일 데이터를 켜도 인터넷이 연결되지 않아요.\n풀려면 버튼을 ${Format.hold(settings.holdSeconds)} 동안 꾹 눌러야 해요."
                 } else {
-                    "Wi-Fi와 모바일 데이터 모두 인터넷이 연결되지 않아요.\n풀려면 버튼을 30초 동안 꾹 눌러야 해요."
+                    "Wi-Fi와 모바일 데이터 모두 인터넷이 연결되지 않아요.\n풀려면 버튼을 ${Format.hold(settings.holdSeconds)} 동안 꾹 눌러야 해요."
                 },
                 style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -127,13 +135,35 @@ fun IdleScreen(
             )
             Spacer(Modifier.height(4.dp))
             ModeCard(settings.mode, onModeChange)
+            HoldCard(settings.holdSeconds, onHoldChange)
             TimerCard(settings.timerMinutes, onTimerChange)
             AllowedAppsCard(settings.allowedPackages, onOpenApps)
             GuardCard()
+            UninstallProtectionCard(sessionActive, onEnableUninstallProtection, onDisableUninstallProtection)
             StrongLockCard()
             if (stats.sessions > 0) SummaryCard(stats, onOpenHistory)
             HowItWorksCard()
         }
+    }
+}
+
+@Composable
+private fun HoldCard(holdSeconds: Int, onHoldChange: (Int) -> Unit) {
+    SectionCard(title = "해제 버튼 누르는 시간", icon = Icons.Rounded.TouchApp) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            HOLD_CHOICES.forEachIndexed { index, seconds ->
+                SegmentedButton(
+                    selected = holdSeconds == seconds,
+                    onClick = { onHoldChange(seconds) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = HOLD_CHOICES.size),
+                ) { Text(Format.hold(seconds), maxLines = 1) }
+            }
+        }
+        Text(
+            "차단을 풀 때 이 버튼을 ${Format.hold(holdSeconds)} 동안 꾹 누르고 있어야 해요. 길수록 충동적으로 풀기 어려워요.",
+            style = MaterialTheme.typography.bodySmall.copy(lineBreak = LineBreak.Heading),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -316,6 +346,52 @@ private fun SummaryCard(stats: Stats, onOpenHistory: () -> Unit) {
             MiniStat("총 차단 시간", Format.duration(stats.totalMs), Modifier.weight(1f))
             MiniStat("차단 횟수", "${stats.sessions}회", Modifier.weight(1f))
             MiniStat("연속 기록", "${stats.streakDays}일", Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun UninstallProtectionCard(
+    sessionActive: Boolean,
+    onEnable: () -> Unit,
+    onDisable: () -> Unit,
+) {
+    val context = LocalContext.current
+    var active by remember { mutableStateOf(DeviceAdmin.isActive(context)) }
+    LifecycleResumeEffect(Unit) {
+        active = DeviceAdmin.isActive(context)
+        onPauseOrDispose { }
+    }
+    SectionCard(
+        title = "앱 삭제 방지",
+        icon = Icons.Rounded.Lock,
+        trailing = {
+            Text(
+                if (active) "켜짐" else "꺼짐",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    ) {
+        Text(
+            "켜 두면 안드로이드의 ‘기기 관리자’로 이 앱의 삭제를 막아요. 차단 중에는 끌 수 없고, 차단을 푼(30초/1분 꾹) 뒤에만 끌 수 있어요. 데이터는 언제든 꾹 눌러 다시 켤 수 있어요.",
+            style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (active) {
+            if (sessionActive) {
+                Text(
+                    "차단 중이에요. 삭제 방지는 차단을 푼 다음에 끌 수 있어요.",
+                    style = MaterialTheme.typography.bodySmall.copy(lineBreak = LineBreak.Heading),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                TextButton(onClick = { onDisable(); active = DeviceAdmin.isActive(context) }) {
+                    Text("삭제 방지 끄기")
+                }
+            }
+        } else {
+            FilledTonalButton(onClick = onEnable) { Text("삭제 방지 켜기") }
         }
     }
 }

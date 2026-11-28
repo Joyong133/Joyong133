@@ -26,7 +26,14 @@ data class Settings(
     val mode: BlockMode = BlockMode.MOBILE_ONLY,
     val timerMinutes: Int = 0,
     val allowedPackages: Set<String> = emptySet(),
+    /** How long the release button must be held: 30 or 60 seconds. */
+    val holdSeconds: Int = DEFAULT_HOLD_SECONDS,
+    /** The user opted in to blocking uninstall (via device admin) while blocking. */
+    val preventUninstall: Boolean = false,
 )
+
+const val DEFAULT_HOLD_SECONDS = 30
+val HOLD_CHOICES = listOf(30, 60)
 
 /** A running session. It is persisted, so it survives reboots and the app being killed. */
 data class ActiveSession(
@@ -35,6 +42,8 @@ data class ActiveSession(
     val endsAt: Long,
     val mode: BlockMode,
     val allowedPackages: Set<String>,
+    /** Fixed when the session starts, so it can't be shortened mid-session. */
+    val holdSeconds: Int = DEFAULT_HOLD_SECONDS,
 ) {
     val hasTimer: Boolean get() = endsAt > 0
 }
