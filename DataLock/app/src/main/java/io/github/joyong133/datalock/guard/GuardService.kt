@@ -54,8 +54,8 @@ class GuardService : AccessibilityService() {
             pkg in settingsPackages && isOwnAccessibilityPage() -> "차단 중에는 차단 지킴이를 끌 수 없어요"
             pkg in settingsPackages && isVpnSettings(event) -> "차단 중에는 VPN 설정을 열 수 없어요"
             pkg !in session.allowedPackages && pkg in vpnApps() -> "차단 중에는 다른 VPN 앱을 쓸 수 없어요"
-            guardUninstall && pkg in installerPackages -> "차단 중에는 앱을 삭제할 수 없어요"
-            guardUninstall && pkg in settingsPackages && isDeviceAdminPage() -> "차단 중에는 기기 관리자를 끌 수 없어요"
+            guardUninstall && pkg in installerPackages && isUninstallingOwnApp() -> "차단 중에는 이 앱을 삭제할 수 없어요"
+            guardUninstall && pkg in settingsPackages && isOwnDeviceAdminPage() -> "차단 중에는 이 앱의 기기 관리자를 끌 수 없어요"
             guardUninstall && pkg in settingsPackages && isOwnAppInfoPage() -> "차단 중에는 이 앱 정보를 열 수 없어요"
             else -> null
         } ?: return
@@ -92,11 +92,33 @@ class GuardService : AccessibilityService() {
         return withTitle { hasTitle(it, depth = 0) { text -> text == label } }
     }
 
-    /** The Settings page that lists / deactivates device administrators. */
-    private fun isDeviceAdminPage(): Boolean {
+    /**
+     * The device-admin detail page for THIS app (its deactivate button), matched by this app's
+     * own admin label as the title. The generic admin list, where other apps' admins are managed,
+     * is not matched, so only this app's admin is protected.
+     */
+    private fun isOwnDeviceAdminPage(): Boolean {
         val label = getString(R.string.admin_label).trim()
-        return withTitle { node ->
-            hasTitle(node, 0) { it == label || it.contains("기기 관리", ignoreCase = true) || it.contains("device admin", ignoreCase = true) }
+        return withTitle { node -> hasTitle(node, 0) { it == label } }
+    }
+
+    /**
+     * True only when the uninstall dialog on screen is uninstalling THIS app. The dialog shows the
+     * target app's label, so other apps' uninstall dialogs don't contain our name and are left
+     * alone. (Device admin already blocks only this app's uninstall; this just matches it.)
+     */
+    private fun isUninstallingOwnApp(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val appName = getString(R.string.app_name).trim()
+        return try {
+            root.findAccessibilityNodeInfosByText(appName).isNotEmpty()
+        } catch (_: RuntimeException) {
+            false
+        } finally {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                @Suppress("DEPRECATION")
+                root.recycle()
+            }
         }
     }
 
