@@ -72,7 +72,7 @@ import io.github.joyong133.datalock.core.Format
 import io.github.joyong133.datalock.core.Settings
 import io.github.joyong133.datalock.core.Stats
 
-private val TIMER_PRESETS = listOf(0, 30, 60, 120, 240, 480)
+private val TIMER_PRESETS = listOf(0, 1, 30, 60, 120, 240, 480)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -341,9 +341,9 @@ private fun GuardCard() {
     ) {
         Text(
             if (enabled) {
-                "차단 중에 VPN 설정 화면, 알림창의 VPN 연결 끊기 창, 다른 VPN 앱이 열리면 바로 닫아요."
+                "차단 중에 VPN 설정 화면, 알림창의 VPN 연결 끊기 창, 다른 VPN 앱, 그리고 이 지킴이를 끄는 접근성 화면이 열리면 바로 닫아요."
             } else {
-                "‘차단 지킴이’를 켜 두면 차단 중에 VPN 설정 화면, 알림창의 VPN 연결 끊기 창, 다른 VPN 앱이 열리자마자 닫혀서 VPN을 끄거나 다른 VPN으로 바꿀 수 없어요."
+                "‘차단 지킴이’를 켜 두면 차단 중에 VPN 설정 화면, 알림창의 VPN 연결 끊기 창, 다른 VPN 앱, 그리고 이 지킴이를 끄는 접근성 화면이 열리자마자 닫혀서 VPN을 끄거나 다른 VPN으로 바꿀 수 없어요."
             },
             style = MaterialTheme.typography.bodyMedium.copy(lineBreak = LineBreak.Heading),
             color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -42,6 +42,7 @@ class FormatAndStatsTest {
         assertEquals("01:05", Format.clock(65_000))
         assertEquals("00:00", Format.clock(-5))
         assertEquals("없음", Format.timer(0))
+        assertEquals("1분", Format.timer(1))
         assertEquals("30분", Format.timer(30))
         assertEquals("1시간", Format.timer(60))
         assertEquals("1시간 30분", Format.timer(90))
